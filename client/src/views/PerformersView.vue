@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
+import { ageOn } from '@/lib/age'
 import type { Gender, Performer } from '@/types'
 
 const performers = ref<Performer[]>([])
@@ -11,6 +12,7 @@ const search = ref('')
 const firstName = ref('')
 const lastName = ref('')
 const gender = ref<Gender | ''>('')
+const dateOfBirth = ref('')
 
 const genderOptions: { value: Gender; label: string }[] = [
   { value: 'Male', label: 'M' },
@@ -38,6 +40,7 @@ async function addPerformer() {
     firstName: firstName.value.trim(),
     lastName: lastName.value.trim(),
     gender: gender.value || null,
+    dateOfBirth: dateOfBirth.value || null,
     isActive: true,
     createdAt: new Date().toISOString(),
   })
@@ -46,6 +49,12 @@ async function addPerformer() {
   firstName.value = ''
   lastName.value = ''
   gender.value = ''
+  dateOfBirth.value = ''
+}
+
+async function setDateOfBirth(performer: Performer, e: Event) {
+  performer.dateOfBirth = (e.target as HTMLInputElement).value || null
+  await api.put(`/performers/${performer.id}`, performer).catch(() => {})
 }
 
 async function setGender(performer: Performer, e: Event) {
@@ -92,6 +101,14 @@ async function removePerformer(performer: Performer) {
         />
       </label>
       <label class="space-y-1">
+        <span class="text-xs font-medium text-muted-foreground">Date of birth</span>
+        <input
+          v-model="dateOfBirth"
+          type="date"
+          class="block rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+      </label>
+      <label class="space-y-1">
         <span class="text-xs font-medium text-muted-foreground">Gender</span>
         <select
           v-model="gender"
@@ -129,7 +146,17 @@ async function removePerformer(performer: Performer) {
           <span v-if="genderLabel(performer.gender)" class="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {{ genderLabel(performer.gender) }}
           </span>
+          <span v-if="ageOn(performer.dateOfBirth) !== null" class="ml-1.5 text-xs text-muted-foreground">
+            {{ ageOn(performer.dateOfBirth) }} yrs
+          </span>
         </span>
+        <input
+          type="date"
+          class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
+          :value="performer.dateOfBirth ?? ''"
+          aria-label="Date of birth"
+          @change="setDateOfBirth(performer, $event)"
+        />
         <select
           class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
           :value="performer.gender ?? ''"

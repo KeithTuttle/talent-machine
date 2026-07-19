@@ -7,6 +7,9 @@ public class Production : ITenantScoped
     public int Id { get; set; }
     public int SeasonId { get; set; }
     public string Title { get; set; } = string.Empty;
+    /// <summary>Optional opening/performance date; ages are computed as of this
+    /// date (falling back to today) so past shows keep historically-true ages.</summary>
+    public DateOnly? ShowDate { get; set; }
     public string? Notes { get; set; }
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

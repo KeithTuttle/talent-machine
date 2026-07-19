@@ -11,6 +11,8 @@ public class Performer : ITenantScoped
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public Gender? Gender { get; set; }
+    /// <summary>Optional; when set, the UI computes age as of a production's show date.</summary>
+    public DateOnly? DateOfBirth { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

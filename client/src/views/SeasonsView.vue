@@ -58,6 +58,12 @@ async function addProduction(season: Season) {
   scope.fetchAll().catch(() => {})
 }
 
+async function setShowDate(production: Production, e: Event) {
+  production.showDate = (e.target as HTMLInputElement).value || null
+  await api.put(`/productions/${production.id}`, production).catch(() => {})
+  scope.fetchAll().catch(() => {})
+}
+
 async function toggleArchive(season: Season) {
   season.isArchived = !season.isArchived
   await api.put(`/seasons/${season.id}`, season).catch(() => {
@@ -150,9 +156,18 @@ async function removeProduction(production: Production) {
         <li
           v-for="production in productionsOf(season.id)"
           :key="production.id"
-          class="flex items-center justify-between px-4 py-2.5 text-sm"
+          class="flex items-center gap-2 px-4 py-2.5 text-sm"
         >
-          <span>{{ production.title }}</span>
+          <span class="flex-1">{{ production.title }}</span>
+          <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+            Show date
+            <input
+              type="date"
+              class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
+              :value="production.showDate ?? ''"
+              @change="setShowDate(production, $event)"
+            />
+          </label>
           <button
             class="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
             :aria-label="`Delete ${production.title}`"

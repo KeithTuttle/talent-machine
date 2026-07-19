@@ -55,6 +55,7 @@ public class ExportController : ControllerBase
             performers = await _db.Performers.AsNoTracking().ToListAsync(),
             productionAccesses = await _db.ProductionAccesses.AsNoTracking().ToListAsync(),
             castGroups = await _db.CastGroups.AsNoTracking().ToListAsync(),
+            levelGroups = await _db.LevelGroups.AsNoTracking().ToListAsync(),
             castMemberships = await _db.CastMemberships.AsNoTracking().ToListAsync(),
             roles = await _db.Roles.AsNoTracking().ToListAsync(),
             numbers = await _db.Numbers.AsNoTracking().ToListAsync(),

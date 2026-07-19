@@ -12,6 +12,8 @@ export interface Production {
   id: number
   seasonId: number
   title: string
+  /** Opening/performance date (yyyy-MM-dd); ages are computed as of this date. */
+  showDate?: string | null
   notes?: string | null
   isArchived: boolean
   createdAt: string
@@ -24,6 +26,8 @@ export interface Performer {
   firstName: string
   lastName: string
   gender?: Gender | null
+  /** yyyy-MM-dd; optional — when set the UI computes ages. */
+  dateOfBirth?: string | null
   notes?: string | null
   isActive: boolean
   createdAt: string
@@ -33,6 +37,21 @@ export interface CastGroup {
   id: number
   productionId: number
   name: string
+  /** Hex color for at-a-glance highlighting, e.g. "#EAB308". */
+  color?: string | null
+  orderIndex: number
+}
+
+export interface LevelGroup {
+  id: number
+  productionId: number
+  name: string
+  /** Free-text ability label, e.g. "Advanced". */
+  level?: string | null
+  minAge?: number | null
+  maxAge?: number | null
+  color?: string | null
+  notes?: string | null
   orderIndex: number
 }
 
@@ -41,6 +60,7 @@ export interface CastMembership {
   productionId: number
   performerId: number
   castGroupId?: number | null
+  levelGroupId?: number | null
   performer?: Performer | null
 }
 

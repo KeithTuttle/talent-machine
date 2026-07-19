@@ -12,20 +12,35 @@ import {
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
+import { ageOn } from '@/lib/age'
+import { tint } from '@/lib/colors'
+import ColorDot from '@/components/ColorDot.vue'
+import ColorPicker from '@/components/ColorPicker.vue'
 import { useScopeStore } from '@/stores/scope'
-import type { CastGroup, CastMembership, MusicalNumber, NumberCast, Performer, Role } from '@/types'
+import type {
+  CastGroup,
+  CastMembership,
+  LevelGroup,
+  MusicalNumber,
+  NumberCast,
+  Performer,
+  Role,
+} from '@/types'
 
 const scope = useScopeStore()
 
 const numbers = ref<MusicalNumber[]>([])
 const cast = ref<CastMembership[]>([])
 const groups = ref<CastGroup[]>([])
+const levelGroups = ref<LevelGroup[]>([])
 const roles = ref<Role[]>([])
 const numberCasts = ref<NumberCast[]>([])
 const performers = ref<Performer[]>([])
 
 const selectedNumberId = ref<number | null>(null)
-const sideTab = ref<'cast' | 'groups' | 'roles'>('cast')
+const sideTab = ref<'cast' | 'groups' | 'levels' | 'roles'>('cast')
+/** Which grouping the casting checklist buckets by. */
+const checklistBy = ref<'cast' | 'level'>('cast')
 
 // --- Loading -----------------------------------------------------------------
 
@@ -44,19 +59,28 @@ async function loadAll() {
     numbers.value = []
     cast.value = []
     groups.value = []
+    levelGroups.value = []
     roles.value = []
     numberCasts.value = []
     return
   }
-  ;[numbers.value, cast.value, groups.value, roles.value, numberCasts.value, performers.value] =
-    await Promise.all([
-      safeGet<MusicalNumber>(`/numbers?productionId=${pid}`),
-      safeGet<CastMembership>(`/castmemberships?productionId=${pid}`),
-      safeGet<CastGroup>(`/castgroups?productionId=${pid}`),
-      safeGet<Role>(`/roles?productionId=${pid}`),
-      safeGet<NumberCast>(`/numbercast?productionId=${pid}`),
-      safeGet<Performer>('/performers'),
-    ])
+  ;[
+    numbers.value,
+    cast.value,
+    groups.value,
+    levelGroups.value,
+    roles.value,
+    numberCasts.value,
+    performers.value,
+  ] = await Promise.all([
+    safeGet<MusicalNumber>(`/numbers?productionId=${pid}`),
+    safeGet<CastMembership>(`/castmemberships?productionId=${pid}`),
+    safeGet<CastGroup>(`/castgroups?productionId=${pid}`),
+    safeGet<LevelGroup>(`/levelgroups?productionId=${pid}`),
+    safeGet<Role>(`/roles?productionId=${pid}`),
+    safeGet<NumberCast>(`/numbercast?productionId=${pid}`),
+    safeGet<Performer>('/performers'),
+  ])
   if (!numbers.value.some((n) => n.id === selectedNumberId.value))
     selectedNumberId.value = numbers.value[0]?.id ?? null
 }
@@ -75,20 +99,47 @@ const performerName = (id: number) => {
   return p ? `${p.firstName} ${p.lastName}`.trim() : `#${id}`
 }
 
-/** Production cast grouped by cast group (plus an "Ungrouped" bucket). */
-const castByGroup = computed(() => {
-  const buckets: { group: CastGroup | null; members: CastMembership[] }[] = [
-    ...groups.value.map((g) => ({ group: g as CastGroup | null, members: [] as CastMembership[] })),
+/** Age as of the production's show date (fallback: today); null when DoB unknown. */
+const performerAge = (id: number) => {
+  const p =
+    cast.value.find((m) => m.performerId === id)?.performer ??
+    performers.value.find((x) => x.id === id)
+  return ageOn(p?.dateOfBirth, scope.selectedProduction?.showDate)
+}
+
+const castGroupOf = (m: CastMembership) => groups.value.find((g) => g.id === m.castGroupId) ?? null
+const levelGroupOf = (m: CastMembership) =>
+  levelGroups.value.find((g) => g.id === m.levelGroupId) ?? null
+
+/** The color a member carries in the checklist (from whichever grouping is active). */
+const memberColor = (m: CastMembership) =>
+  (checklistBy.value === 'level' ? levelGroupOf(m) : castGroupOf(m))?.color ?? null
+
+interface Bucket {
+  group: (CastGroup | LevelGroup) | null
+  members: CastMembership[]
+}
+
+/** Production cast bucketed by a grouping (plus an "Ungrouped" bucket). */
+function bucketize(defs: (CastGroup | LevelGroup)[], idOf: (m: CastMembership) => number | null) {
+  const buckets: Bucket[] = [
+    ...defs.map((g) => ({ group: g as Bucket['group'], members: [] as CastMembership[] })),
     { group: null, members: [] },
   ]
   for (const m of cast.value) {
-    const bucket = buckets.find((b) => (b.group?.id ?? null) === (m.castGroupId ?? null))
+    const bucket = buckets.find((b) => (b.group?.id ?? null) === (idOf(m) ?? null))
     ;(bucket ?? buckets[buckets.length - 1]).members.push(m)
   }
   for (const b of buckets)
     b.members.sort((x, y) => performerName(x.performerId).localeCompare(performerName(y.performerId)))
   return buckets.filter((b) => b.group !== null || b.members.length > 0)
-})
+}
+
+const castByGroup = computed(() => bucketize(groups.value, (m) => m.castGroupId ?? null))
+const castByLevel = computed(() => bucketize(levelGroups.value, (m) => m.levelGroupId ?? null))
+const checklistBuckets = computed(() =>
+  checklistBy.value === 'level' ? castByLevel.value : castByGroup.value,
+)
 
 const castCountOf = (numberId: number) =>
   numberCasts.value.filter((c) => c.musicalNumberId === numberId).length
@@ -169,7 +220,7 @@ async function toggleCast(performerId: number) {
   }
 }
 
-async function addGroupToNumber(bucket: { group: CastGroup | null; members: CastMembership[] }) {
+async function addGroupToNumber(bucket: Bucket) {
   const numberId = selectedNumberId.value
   if (numberId === null) return
   const missing = bucket.members.filter((m) => !isCast(numberId, m.performerId))
@@ -231,6 +282,12 @@ async function setMemberGroup(member: CastMembership, e: Event) {
   await api.put(`/castmemberships/${member.id}`, { ...member, performer: undefined }).catch(() => {})
 }
 
+async function setMemberLevel(member: CastMembership, e: Event) {
+  const raw = (e.target as HTMLSelectElement).value
+  member.levelGroupId = raw === '' ? null : Number(raw)
+  await api.put(`/castmemberships/${member.id}`, { ...member, performer: undefined }).catch(() => {})
+}
+
 async function removeFromCast(member: CastMembership) {
   const ok = await confirm({
     title: `Remove ${performerName(member.performerId)} from this production?`,
@@ -254,6 +311,71 @@ async function addGroup() {
   })
   groups.value.push(data)
   newGroupName.value = ''
+}
+
+async function saveGroupColor(group: CastGroup) {
+  await api.put(`/castgroups/${group.id}`, group).catch(() => {})
+}
+
+// --- Level groups (age/ability) ---------------------------------------------
+
+const newLevelName = ref('')
+const newLevelLabel = ref('')
+const newLevelMinAge = ref<number | ''>('')
+const newLevelMaxAge = ref<number | ''>('')
+
+async function addLevelGroup() {
+  const pid = scope.selectedProductionId
+  const name = newLevelName.value.trim()
+  if (pid === null || !name) return
+  const { data } = await api.post<LevelGroup>('/levelgroups', {
+    id: 0,
+    productionId: pid,
+    name,
+    level: newLevelLabel.value.trim() || null,
+    minAge: newLevelMinAge.value === '' ? null : newLevelMinAge.value,
+    maxAge: newLevelMaxAge.value === '' ? null : newLevelMaxAge.value,
+    orderIndex: levelGroups.value.length + 1,
+  })
+  levelGroups.value.push(data)
+  newLevelName.value = ''
+  newLevelLabel.value = ''
+  newLevelMinAge.value = ''
+  newLevelMaxAge.value = ''
+}
+
+async function saveLevelGroup(group: LevelGroup) {
+  await api.put(`/levelgroups/${group.id}`, group).catch(() => {})
+}
+
+async function deleteLevelGroup(group: LevelGroup) {
+  const ok = await confirm({
+    title: `Delete level group “${group.name}”?`,
+    message: 'Kids in it stay in the show, just unleveled.',
+    destructive: true,
+    confirmText: 'Delete',
+  })
+  if (!ok) return
+  await api.delete(`/levelgroups/${group.id}`)
+  levelGroups.value = levelGroups.value.filter((g) => g.id !== group.id)
+  for (const m of cast.value) if (m.levelGroupId === group.id) m.levelGroupId = null
+}
+
+/** Age-range description like "8–12", "8+", or "to 12". */
+function ageRangeLabel(group: LevelGroup) {
+  if (group.minAge != null && group.maxAge != null) return `${group.minAge}–${group.maxAge}`
+  if (group.minAge != null) return `${group.minAge}+`
+  if (group.maxAge != null) return `to ${group.maxAge}`
+  return null
+}
+
+/** True when a member's age is known and outside the group's range. */
+function outOfRange(group: LevelGroup, m: CastMembership) {
+  const age = performerAge(m.performerId)
+  if (age === null) return false
+  if (group.minAge != null && age < group.minAge) return true
+  if (group.maxAge != null && age > group.maxAge) return true
+  return false
 }
 
 async function deleteGroup(group: CastGroup) {
@@ -379,7 +501,7 @@ async function deleteRole(role: Role) {
         <div class="rounded-lg border border-border">
           <div class="flex border-b border-border text-sm">
             <button
-              v-for="tab in (['cast', 'groups', 'roles'] as const)"
+              v-for="tab in (['cast', 'groups', 'levels', 'roles'] as const)"
               :key="tab"
               class="flex-1 px-3 py-2 font-medium capitalize"
               :class="sideTab === tab ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'"
@@ -421,14 +543,31 @@ async function deleteRole(role: Role) {
             <p v-if="cast.length === 0" class="text-center text-xs text-muted-foreground">Nobody in this production yet.</p>
             <ul class="space-y-1">
               <li v-for="m in cast" :key="m.id" class="flex items-center gap-2 text-sm">
-                <span class="flex-1 truncate">{{ performerName(m.performerId) }}</span>
+                <ColorDot :color="castGroupOf(m)?.color" size="sm" />
+                <ColorDot :color="levelGroupOf(m)?.color" size="sm" />
+                <span class="flex-1 truncate">
+                  {{ performerName(m.performerId) }}
+                  <span v-if="performerAge(m.performerId) !== null" class="ml-1 text-xs text-muted-foreground">
+                    {{ performerAge(m.performerId) }}
+                  </span>
+                </span>
                 <select
                   class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
                   :value="m.castGroupId ?? ''"
+                  aria-label="Cast group"
                   @change="setMemberGroup(m, $event)"
                 >
                   <option value="">No group</option>
                   <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+                </select>
+                <select
+                  class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
+                  :value="m.levelGroupId ?? ''"
+                  aria-label="Level group"
+                  @change="setMemberLevel(m, $event)"
+                >
+                  <option value="">No level</option>
+                  <option v-for="g in levelGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
                 </select>
                 <button
                   class="rounded p-1 text-muted-foreground hover:text-destructive"
@@ -452,21 +591,109 @@ async function deleteRole(role: Role) {
               <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent">Add</button>
             </form>
             <p v-if="groups.length === 0" class="text-center text-xs text-muted-foreground">No groups yet.</p>
-            <ul class="space-y-1">
-              <li v-for="g in groups" :key="g.id" class="flex items-center justify-between text-sm">
-                <span>{{ g.name }}</span>
-                <span class="flex items-center gap-2">
-                  <span class="text-xs text-muted-foreground">
-                    {{ cast.filter((m) => m.castGroupId === g.id).length }} performers
+            <ul class="space-y-2">
+              <li v-for="g in groups" :key="g.id" class="space-y-1 text-sm">
+                <div class="flex items-center justify-between">
+                  <span class="flex items-center gap-1.5">
+                    <ColorDot :color="g.color" />
+                    {{ g.name }}
+                  </span>
+                  <span class="flex items-center gap-2">
+                    <span class="text-xs text-muted-foreground">
+                      {{ cast.filter((m) => m.castGroupId === g.id).length }} performers
+                    </span>
+                    <button
+                      class="rounded p-1 text-muted-foreground hover:text-destructive"
+                      :aria-label="`Delete ${g.name}`"
+                      @click="deleteGroup(g)"
+                    >
+                      <Trash2 class="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </div>
+                <ColorPicker
+                  :model-value="g.color ?? null"
+                  @update:model-value="(v: string | null | undefined) => { g.color = v ?? null; saveGroupColor(g) }"
+                />
+              </li>
+            </ul>
+          </div>
+
+          <!-- Levels tab (age/ability groups) -->
+          <div v-else-if="sideTab === 'levels'" class="space-y-3 p-3">
+            <form class="space-y-2" @submit.prevent="addLevelGroup">
+              <div class="flex gap-2">
+                <input
+                  v-model="newLevelName"
+                  placeholder="New level group (e.g. Gold Group)"
+                  class="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent">Add</button>
+              </div>
+              <div class="flex gap-2">
+                <input
+                  v-model="newLevelLabel"
+                  placeholder="Ability (e.g. Advanced)"
+                  class="w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <input
+                  v-model.number="newLevelMinAge"
+                  type="number"
+                  min="0"
+                  placeholder="Min age"
+                  class="w-20 rounded-md border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <input
+                  v-model.number="newLevelMaxAge"
+                  type="number"
+                  min="0"
+                  placeholder="Max age"
+                  class="w-20 rounded-md border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+            </form>
+            <p v-if="levelGroups.length === 0" class="text-center text-xs text-muted-foreground">
+              No level groups yet — group kids by age &amp; ability per show.
+            </p>
+            <ul class="space-y-3">
+              <li v-for="g in levelGroups" :key="g.id" class="space-y-1 text-sm">
+                <div class="flex items-center justify-between">
+                  <span class="flex items-center gap-1.5">
+                    <ColorDot :color="g.color" />
+                    <span class="font-medium">{{ g.name }}</span>
+                    <span v-if="g.level" class="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{{ g.level }}</span>
+                    <span v-if="ageRangeLabel(g)" class="text-xs text-muted-foreground">{{ ageRangeLabel(g) }}</span>
                   </span>
                   <button
                     class="rounded p-1 text-muted-foreground hover:text-destructive"
                     :aria-label="`Delete ${g.name}`"
-                    @click="deleteGroup(g)"
+                    @click="deleteLevelGroup(g)"
                   >
                     <Trash2 class="h-3.5 w-3.5" />
                   </button>
-                </span>
+                </div>
+                <ColorPicker
+                  :model-value="g.color ?? null"
+                  @update:model-value="(v: string | null | undefined) => { g.color = v ?? null; saveLevelGroup(g) }"
+                />
+                <ul class="ml-4 space-y-0.5">
+                  <li
+                    v-for="m in cast.filter((x) => x.levelGroupId === g.id)"
+                    :key="m.id"
+                    class="text-xs text-muted-foreground"
+                  >
+                    {{ performerName(m.performerId) }}
+                    <span
+                      v-if="performerAge(m.performerId) !== null"
+                      :class="outOfRange(g, m) ? 'font-medium text-destructive' : ''"
+                    >
+                      · {{ performerAge(m.performerId) }}
+                    </span>
+                  </li>
+                  <li v-if="!cast.some((x) => x.levelGroupId === g.id)" class="text-xs italic text-muted-foreground">
+                    Nobody assigned (use the Cast tab)
+                  </li>
+                </ul>
               </li>
             </ul>
           </div>
@@ -551,18 +778,32 @@ async function deleteRole(role: Role) {
 
         <!-- Casting checklist -->
         <div class="rounded-lg border border-border p-4">
-          <h2 class="text-sm font-semibold">
-            Cast in “{{ selectedNumber.title }}”
-            <span class="ml-1 font-normal text-muted-foreground">({{ castCountOf(selectedNumber.id) }})</span>
-          </h2>
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold">
+              Cast in “{{ selectedNumber.title }}”
+              <span class="ml-1 font-normal text-muted-foreground">({{ castCountOf(selectedNumber.id) }})</span>
+            </h2>
+            <div class="flex rounded-md border border-border text-xs">
+              <button
+                v-for="mode in ([['cast', 'By group'], ['level', 'By level']] as const)"
+                :key="mode[0]"
+                class="px-2 py-1 font-medium"
+                :class="checklistBy === mode[0] ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'"
+                @click="checklistBy = mode[0]"
+              >
+                {{ mode[1] }}
+              </button>
+            </div>
+          </div>
           <p v-if="cast.length === 0" class="mt-3 text-sm text-muted-foreground">
             Add performers to the production first (Cast tab on the left).
           </p>
           <div v-else class="mt-3 space-y-4">
-            <div v-for="bucket in castByGroup" :key="bucket.group?.id ?? 'ungrouped'">
+            <div v-for="bucket in checklistBuckets" :key="bucket.group?.id ?? 'ungrouped'">
               <div class="flex items-center justify-between">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {{ bucket.group?.name ?? 'Ungrouped' }}
+                <h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <ColorDot :color="bucket.group?.color" size="sm" />
+                  {{ bucket.group?.name ?? (checklistBy === 'level' ? 'No level' : 'Ungrouped') }}
                 </h3>
                 <button
                   v-if="bucket.members.length > 0"
@@ -578,6 +819,7 @@ async function deleteRole(role: Role) {
                   :key="m.id"
                   class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50"
                   :class="isCast(selectedNumber.id, m.performerId) ? 'border-primary bg-accent' : ''"
+                  :style="!isCast(selectedNumber.id, m.performerId) ? { backgroundColor: tint(memberColor(m)) } : undefined"
                 >
                   <input
                     type="checkbox"
@@ -585,7 +827,12 @@ async function deleteRole(role: Role) {
                     :checked="isCast(selectedNumber.id, m.performerId)"
                     @change="toggleCast(m.performerId)"
                   />
-                  <span class="truncate">{{ performerName(m.performerId) }}</span>
+                  <span class="truncate">
+                    {{ performerName(m.performerId) }}
+                    <span v-if="performerAge(m.performerId) !== null" class="text-xs text-muted-foreground">
+                      · {{ performerAge(m.performerId) }}
+                    </span>
+                  </span>
                 </label>
               </div>
             </div>
