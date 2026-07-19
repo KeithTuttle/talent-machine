@@ -62,7 +62,20 @@ public class TenantResolutionMiddleware
                 }
 
                 currentTenant.TenantId = membership.TenantId;
+                currentTenant.MembershipId = membership.Id;
                 currentTenant.Role = membership.Role;
+
+                // Members collaborate at the show level: they only see productions
+                // they've been granted (ProductionAccess). Owners are unrestricted
+                // (AccessibleProductionIds stays null). Set the tenant BEFORE this
+                // query so the ProductionAccess tenant filter applies correctly.
+                if (membership.Role == MembershipRole.Member)
+                {
+                    currentTenant.AccessibleProductionIds = await db.ProductionAccesses
+                        .Where(a => a.MembershipId == membership.Id)
+                        .Select(a => a.ProductionId)
+                        .ToListAsync();
+                }
             }
         }
 

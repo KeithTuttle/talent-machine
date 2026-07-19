@@ -20,6 +20,10 @@ public class Invitation : ITenantScoped
     public string? Email { get; set; }
 
     public MembershipRole Role { get; set; } = MembershipRole.Member;
+
+    /// <summary>When set, redeeming this invite grants access to just this show
+    /// (a ProductionAccess row). Owners can grant more shows later.</summary>
+    public int? ProductionId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>Set when redeemed; a redeemed invite cannot be used again.</summary>

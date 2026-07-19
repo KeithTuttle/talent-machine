@@ -31,7 +31,7 @@ const toggleDark = useToggle(isDark)
 
 const nav = [
   { to: '/', label: 'Planner', icon: Drama },
-  { to: '/people', label: 'People', icon: Users },
+  { to: '/performers', label: 'Performers', icon: Users },
   { to: '/seasons', label: 'Seasons & Shows', icon: CalendarRange },
   { to: '/team', label: 'Team', icon: UserPlus },
 ]

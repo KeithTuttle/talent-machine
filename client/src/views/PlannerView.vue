@@ -13,7 +13,7 @@ import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
 import { useScopeStore } from '@/stores/scope'
-import type { CastGroup, CastMembership, MusicalNumber, NumberCast, Person, Role } from '@/types'
+import type { CastGroup, CastMembership, MusicalNumber, NumberCast, Performer, Role } from '@/types'
 
 const scope = useScopeStore()
 
@@ -22,7 +22,7 @@ const cast = ref<CastMembership[]>([])
 const groups = ref<CastGroup[]>([])
 const roles = ref<Role[]>([])
 const numberCasts = ref<NumberCast[]>([])
-const people = ref<Person[]>([])
+const performers = ref<Performer[]>([])
 
 const selectedNumberId = ref<number | null>(null)
 const sideTab = ref<'cast' | 'groups' | 'roles'>('cast')
@@ -48,14 +48,14 @@ async function loadAll() {
     numberCasts.value = []
     return
   }
-  ;[numbers.value, cast.value, groups.value, roles.value, numberCasts.value, people.value] =
+  ;[numbers.value, cast.value, groups.value, roles.value, numberCasts.value, performers.value] =
     await Promise.all([
       safeGet<MusicalNumber>(`/numbers?productionId=${pid}`),
       safeGet<CastMembership>(`/castmemberships?productionId=${pid}`),
       safeGet<CastGroup>(`/castgroups?productionId=${pid}`),
       safeGet<Role>(`/roles?productionId=${pid}`),
       safeGet<NumberCast>(`/numbercast?productionId=${pid}`),
-      safeGet<Person>('/people'),
+      safeGet<Performer>('/performers'),
     ])
   if (!numbers.value.some((n) => n.id === selectedNumberId.value))
     selectedNumberId.value = numbers.value[0]?.id ?? null
@@ -70,8 +70,8 @@ const selectedNumber = computed(
   () => numbers.value.find((n) => n.id === selectedNumberId.value) ?? null,
 )
 
-const personName = (id: number) => {
-  const p = cast.value.find((m) => m.personId === id)?.person ?? people.value.find((x) => x.id === id)
+const performerName = (id: number) => {
+  const p = cast.value.find((m) => m.performerId === id)?.performer ?? performers.value.find((x) => x.id === id)
   return p ? `${p.firstName} ${p.lastName}`.trim() : `#${id}`
 }
 
@@ -86,19 +86,19 @@ const castByGroup = computed(() => {
     ;(bucket ?? buckets[buckets.length - 1]).members.push(m)
   }
   for (const b of buckets)
-    b.members.sort((x, y) => personName(x.personId).localeCompare(personName(y.personId)))
+    b.members.sort((x, y) => performerName(x.performerId).localeCompare(performerName(y.performerId)))
   return buckets.filter((b) => b.group !== null || b.members.length > 0)
 })
 
 const castCountOf = (numberId: number) =>
   numberCasts.value.filter((c) => c.musicalNumberId === numberId).length
 
-const isCast = (numberId: number, personId: number) =>
-  numberCasts.value.some((c) => c.musicalNumberId === numberId && c.personId === personId)
+const isCast = (numberId: number, performerId: number) =>
+  numberCasts.value.some((c) => c.musicalNumberId === numberId && c.performerId === performerId)
 
-/** People not yet in this production (for the "add to cast" picker). */
-const availablePeople = computed(() =>
-  people.value.filter((p) => !cast.value.some((m) => m.personId === p.id)),
+/** Performers not yet in this production (for the "add to cast" picker). */
+const availablePerformers = computed(() =>
+  performers.value.filter((p) => !cast.value.some((m) => m.performerId === p.id)),
 )
 
 // --- Numbers -----------------------------------------------------------------
@@ -155,37 +155,37 @@ async function moveNumber(number: MusicalNumber, delta: -1 | 1) {
 
 // --- Number casting ----------------------------------------------------------
 
-async function toggleCast(personId: number) {
+async function toggleCast(performerId: number) {
   const numberId = selectedNumberId.value
   if (numberId === null) return
-  if (isCast(numberId, personId)) {
+  if (isCast(numberId, performerId)) {
     numberCasts.value = numberCasts.value.filter(
-      (c) => !(c.musicalNumberId === numberId && c.personId === personId),
+      (c) => !(c.musicalNumberId === numberId && c.performerId === performerId),
     )
-    await api.delete(`/numbercast?numberId=${numberId}&personId=${personId}`).catch(() => {})
+    await api.delete(`/numbercast?numberId=${numberId}&performerId=${performerId}`).catch(() => {})
   } else {
-    numberCasts.value.push({ musicalNumberId: numberId, personId })
-    await api.post('/numbercast', { musicalNumberId: numberId, personId }).catch(() => {})
+    numberCasts.value.push({ musicalNumberId: numberId, performerId })
+    await api.post('/numbercast', { musicalNumberId: numberId, performerId }).catch(() => {})
   }
 }
 
 async function addGroupToNumber(bucket: { group: CastGroup | null; members: CastMembership[] }) {
   const numberId = selectedNumberId.value
   if (numberId === null) return
-  const missing = bucket.members.filter((m) => !isCast(numberId, m.personId))
+  const missing = bucket.members.filter((m) => !isCast(numberId, m.performerId))
   for (const m of missing) {
-    numberCasts.value.push({ musicalNumberId: numberId, personId: m.personId })
+    numberCasts.value.push({ musicalNumberId: numberId, performerId: m.performerId })
   }
   await Promise.all(
     missing.map((m) =>
-      api.post('/numbercast', { musicalNumberId: numberId, personId: m.personId }).catch(() => {}),
+      api.post('/numbercast', { musicalNumberId: numberId, performerId: m.performerId }).catch(() => {}),
     ),
   )
 }
 
 // --- Production cast / groups / roles ---------------------------------------
 
-const addPersonId = ref<number | ''>('')
+const addPerformerId = ref<number | ''>('')
 const quickFirst = ref('')
 const quickLast = ref('')
 const newGroupName = ref('')
@@ -193,34 +193,34 @@ const newRoleName = ref('')
 
 async function addExistingToCast() {
   const pid = scope.selectedProductionId
-  if (pid === null || addPersonId.value === '') return
+  if (pid === null || addPerformerId.value === '') return
   const { data } = await api.post<CastMembership>('/castmemberships', {
     id: 0,
     productionId: pid,
-    personId: addPersonId.value,
+    performerId: addPerformerId.value,
   })
   cast.value.push(data)
-  addPersonId.value = ''
+  addPerformerId.value = ''
 }
 
-async function quickCreatePerson() {
+async function quickCreatePerformer() {
   const pid = scope.selectedProductionId
   if (pid === null || !quickFirst.value.trim()) return
-  const { data: person } = await api.post<Person>('/people', {
+  const { data: performer } = await api.post<Performer>('/performers', {
     id: 0,
     firstName: quickFirst.value.trim(),
     lastName: quickLast.value.trim(),
     isActive: true,
     createdAt: new Date().toISOString(),
   })
-  people.value.push(person)
+  performers.value.push(performer)
   const { data: membership } = await api.post<CastMembership>('/castmemberships', {
     id: 0,
     productionId: pid,
-    personId: person.id,
+    performerId: performer.id,
   })
   cast.value.push(membership)
-  toast.success(`${person.firstName} added to the cast`)
+  toast.success(`${performer.firstName} added to the cast`)
   quickFirst.value = ''
   quickLast.value = ''
 }
@@ -228,12 +228,12 @@ async function quickCreatePerson() {
 async function setMemberGroup(member: CastMembership, e: Event) {
   const raw = (e.target as HTMLSelectElement).value
   member.castGroupId = raw === '' ? null : Number(raw)
-  await api.put(`/castmemberships/${member.id}`, { ...member, person: undefined }).catch(() => {})
+  await api.put(`/castmemberships/${member.id}`, { ...member, performer: undefined }).catch(() => {})
 }
 
 async function removeFromCast(member: CastMembership) {
   const ok = await confirm({
-    title: `Remove ${personName(member.personId)} from this production?`,
+    title: `Remove ${performerName(member.performerId)} from this production?`,
     destructive: true,
     confirmText: 'Remove',
   })
@@ -259,7 +259,7 @@ async function addGroup() {
 async function deleteGroup(group: CastGroup) {
   const ok = await confirm({
     title: `Delete group “${group.name}”?`,
-    message: 'People in it stay in the show, just ungrouped.',
+    message: 'Performers in it stay in the show, just ungrouped.',
     destructive: true,
     confirmText: 'Delete',
   })
@@ -283,9 +283,9 @@ async function addRole() {
   newRoleName.value = ''
 }
 
-async function setRolePerson(role: Role, e: Event) {
+async function setRolePerformer(role: Role, e: Event) {
   const raw = (e.target as HTMLSelectElement).value
-  role.personId = raw === '' ? null : Number(raw)
+  role.performerId = raw === '' ? null : Number(raw)
   await api.put(`/roles/${role.id}`, role).catch(() => {})
 }
 
@@ -391,19 +391,19 @@ async function deleteRole(role: Role) {
 
           <!-- Cast tab -->
           <div v-if="sideTab === 'cast'" class="space-y-3 p-3">
-            <form v-if="availablePeople.length > 0" class="flex gap-2" @submit.prevent="addExistingToCast">
+            <form v-if="availablePerformers.length > 0" class="flex gap-2" @submit.prevent="addExistingToCast">
               <select
-                v-model="addPersonId"
+                v-model="addPerformerId"
                 class="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
               >
-                <option value="" disabled>Add existing person…</option>
-                <option v-for="p in availablePeople" :key="p.id" :value="p.id">
+                <option value="" disabled>Add existing performer…</option>
+                <option v-for="p in availablePerformers" :key="p.id" :value="p.id">
                   {{ p.firstName }} {{ p.lastName }}
                 </option>
               </select>
               <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent">Add</button>
             </form>
-            <form class="flex gap-2" @submit.prevent="quickCreatePerson">
+            <form class="flex gap-2" @submit.prevent="quickCreatePerformer">
               <input
                 v-model="quickFirst"
                 placeholder="First"
@@ -414,14 +414,14 @@ async function deleteRole(role: Role) {
                 placeholder="Last"
                 class="w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
               />
-              <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent" aria-label="Quick-add person">
+              <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent" aria-label="Quick-add performer">
                 <Plus class="h-4 w-4" />
               </button>
             </form>
             <p v-if="cast.length === 0" class="text-center text-xs text-muted-foreground">Nobody in this production yet.</p>
             <ul class="space-y-1">
               <li v-for="m in cast" :key="m.id" class="flex items-center gap-2 text-sm">
-                <span class="flex-1 truncate">{{ personName(m.personId) }}</span>
+                <span class="flex-1 truncate">{{ performerName(m.performerId) }}</span>
                 <select
                   class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
                   :value="m.castGroupId ?? ''"
@@ -432,7 +432,7 @@ async function deleteRole(role: Role) {
                 </select>
                 <button
                   class="rounded p-1 text-muted-foreground hover:text-destructive"
-                  :aria-label="`Remove ${personName(m.personId)}`"
+                  :aria-label="`Remove ${performerName(m.performerId)}`"
                   @click="removeFromCast(m)"
                 >
                   <Trash2 class="h-3.5 w-3.5" />
@@ -457,7 +457,7 @@ async function deleteRole(role: Role) {
                 <span>{{ g.name }}</span>
                 <span class="flex items-center gap-2">
                   <span class="text-xs text-muted-foreground">
-                    {{ cast.filter((m) => m.castGroupId === g.id).length }} people
+                    {{ cast.filter((m) => m.castGroupId === g.id).length }} performers
                   </span>
                   <button
                     class="rounded p-1 text-muted-foreground hover:text-destructive"
@@ -487,12 +487,12 @@ async function deleteRole(role: Role) {
                 <span class="flex-1 truncate font-medium">{{ r.name }}</span>
                 <select
                   class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
-                  :value="r.personId ?? ''"
-                  @change="setRolePerson(r, $event)"
+                  :value="r.performerId ?? ''"
+                  @change="setRolePerformer(r, $event)"
                 >
                   <option value="">Uncast</option>
-                  <option v-for="m in cast" :key="m.personId" :value="m.personId">
-                    {{ personName(m.personId) }}
+                  <option v-for="m in cast" :key="m.performerId" :value="m.performerId">
+                    {{ performerName(m.performerId) }}
                   </option>
                 </select>
                 <button
@@ -556,7 +556,7 @@ async function deleteRole(role: Role) {
             <span class="ml-1 font-normal text-muted-foreground">({{ castCountOf(selectedNumber.id) }})</span>
           </h2>
           <p v-if="cast.length === 0" class="mt-3 text-sm text-muted-foreground">
-            Add people to the production first (Cast tab on the left).
+            Add performers to the production first (Cast tab on the left).
           </p>
           <div v-else class="mt-3 space-y-4">
             <div v-for="bucket in castByGroup" :key="bucket.group?.id ?? 'ungrouped'">
@@ -577,15 +577,15 @@ async function deleteRole(role: Role) {
                   v-for="m in bucket.members"
                   :key="m.id"
                   class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50"
-                  :class="isCast(selectedNumber.id, m.personId) ? 'border-primary bg-accent' : ''"
+                  :class="isCast(selectedNumber.id, m.performerId) ? 'border-primary bg-accent' : ''"
                 >
                   <input
                     type="checkbox"
                     class="accent-[hsl(var(--primary))]"
-                    :checked="isCast(selectedNumber.id, m.personId)"
-                    @change="toggleCast(m.personId)"
+                    :checked="isCast(selectedNumber.id, m.performerId)"
+                    @change="toggleCast(m.performerId)"
                   />
-                  <span class="truncate">{{ personName(m.personId) }}</span>
+                  <span class="truncate">{{ performerName(m.performerId) }}</span>
                 </label>
               </div>
             </div>

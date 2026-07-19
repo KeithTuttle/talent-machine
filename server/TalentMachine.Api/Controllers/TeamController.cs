@@ -9,9 +9,13 @@ using TalentMachine.Api.Models;
 namespace TalentMachine.Api.Controllers;
 
 /// <summary>
-/// Team management for the current tenant: list members, create/revoke join-code
-/// invitations, redeem a code to move into another tenant, remove a member.
-/// Invites are shared by copying the code (no email sending in this app yet).
+/// Team management for the current tenant: list members (with their show access),
+/// create/revoke join-code invitations (optionally scoped to one show), redeem a
+/// code to move into another tenant, grant/revoke show access, remove a member.
+///
+/// Access model: the Owner (company manager) sees everything and assigns shows;
+/// Members (directors, choreographers, music directors, producers…) only see the
+/// productions they've been granted. Invites are shared by copying the code.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -26,12 +30,17 @@ public class TeamController : ControllerBase
         _tenant = tenant;
     }
 
-    public record MemberDto(int Id, string Role, string? Email, string? DisplayName, bool IsYou);
-    public record InvitationDto(int Id, string Code, string? Email, string Role, DateTimeOffset CreatedAt);
+    public record MemberDto(
+        int Id, string Role, string? Email, string? DisplayName, bool IsYou,
+        List<int> ProductionIds);
+    public record InvitationDto(
+        int Id, string Code, string? Email, string Role, DateTimeOffset CreatedAt,
+        int? ProductionId);
     public record TeamResponse(string TenantName, string YourRole, List<MemberDto> Members, List<InvitationDto> Invitations);
-    public record CreateInviteRequest(string? Email);
+    public record CreateInviteRequest(string? Email, int? ProductionId);
     public record JoinRequest(string Code);
     public record JoinResponse(string TenantName);
+    public record AccessRequest(int ProductionId);
 
     // Unambiguous alphabet (no 0/O/1/I/L) for join codes read out loud or typed.
     private const string CodeAlphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -39,11 +48,7 @@ public class TeamController : ControllerBase
     private string? CallerId =>
         User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-    /// <summary>Owner when resolved; also true when auth is disabled in local dev
-    /// (the middleware never runs, so Role stays null — the whole API is open then).</summary>
-    private bool IsOwner => _tenant.Role is null or MembershipRole.Owner;
-
-    // GET /api/team — members + (for owners) pending invitations.
+    // GET /api/team — members (+ show access) and, for owners, pending invitations.
     [HttpGet]
     public async Task<ActionResult<TeamResponse>> Get()
     {
@@ -58,20 +63,23 @@ public class TeamController : ControllerBase
             .Where(m => m.TenantId == tenantId)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
+        var access = await _db.ProductionAccesses.ToListAsync(); // tenant-filtered
         var memberDtos = members
             .Select(m => new MemberDto(
-                m.Id, m.Role.ToString(), m.Email, m.DisplayName, caller != null && m.ClerkUserId == caller))
+                m.Id, m.Role.ToString(), m.Email, m.DisplayName,
+                caller != null && m.ClerkUserId == caller,
+                access.Where(a => a.MembershipId == m.Id).Select(a => a.ProductionId).ToList()))
             .ToList();
 
         var invites = new List<InvitationDto>();
-        if (IsOwner)
+        if (_tenant.IsOwner())
         {
             var rows = await _db.Invitations
                 .Where(i => i.AcceptedAt == null)
                 .OrderByDescending(i => i.CreatedAt)
                 .ToListAsync();
             invites = rows
-                .Select(i => new InvitationDto(i.Id, i.Code, i.Email, i.Role.ToString(), i.CreatedAt))
+                .Select(i => new InvitationDto(i.Id, i.Code, i.Email, i.Role.ToString(), i.CreatedAt, i.ProductionId))
                 .ToList();
         }
 
@@ -79,16 +87,25 @@ public class TeamController : ControllerBase
         return new TeamResponse(tenantName, yourRole, memberDtos, invites);
     }
 
-    // POST /api/team/invitations — create a join-code invite (owners only).
+    // POST /api/team/invitations — create a join-code invite (owners only),
+    // optionally scoped to one show the invitee will get access to.
     [HttpPost("invitations")]
     public async Task<ActionResult<InvitationDto>> CreateInvite(CreateInviteRequest input)
     {
-        if (!IsOwner) return StatusCode(403);
+        if (!_tenant.IsOwner()) return StatusCode(403);
+
+        if (input.ProductionId is not null)
+        {
+            // Tenant-filtered: an out-of-tenant production simply isn't found.
+            var exists = await _db.Productions.AnyAsync(p => p.Id == input.ProductionId);
+            if (!exists) return BadRequest("That production doesn't exist.");
+        }
 
         var invite = new Invitation
         {
             Email = string.IsNullOrWhiteSpace(input.Email) ? null : input.Email.Trim(),
             Role = MembershipRole.Member,
+            ProductionId = input.ProductionId,
         };
 
         // Retry on the (astronomically unlikely) code collision.
@@ -107,14 +124,14 @@ public class TeamController : ControllerBase
             }
         }
 
-        return new InvitationDto(invite.Id, invite.Code, invite.Email, invite.Role.ToString(), invite.CreatedAt);
+        return new InvitationDto(invite.Id, invite.Code, invite.Email, invite.Role.ToString(), invite.CreatedAt, invite.ProductionId);
     }
 
     // DELETE /api/team/invitations/{id} — revoke a pending invite (owners only).
     [HttpDelete("invitations/{id:int}")]
     public async Task<IActionResult> RevokeInvite(int id)
     {
-        if (!IsOwner) return StatusCode(403);
+        if (!_tenant.IsOwner()) return StatusCode(403);
         var invite = await _db.Invitations.FirstOrDefaultAsync(i => i.Id == id && i.AcceptedAt == null);
         if (invite is null) return NotFound();
         _db.Invitations.Remove(invite);
@@ -123,7 +140,8 @@ public class TeamController : ControllerBase
     }
 
     // POST /api/team/join — redeem a code: move the caller's membership into the
-    // inviting tenant. Their auto-provisioned empty tenant is left behind.
+    // inviting tenant (as a Member) and grant the invite's show, if any. Their
+    // auto-provisioned empty tenant is left behind.
     [HttpPost("join")]
     public async Task<ActionResult<JoinResponse>> Join(JoinRequest input)
     {
@@ -154,9 +172,57 @@ public class TeamController : ControllerBase
         membership.Role = invite.Role;
         invite.AcceptedAt = DateTimeOffset.UtcNow;
         invite.AcceptedByClerkUserId = caller;
+
+        // Show-scoped invite → grant that show. TenantId is set explicitly: the
+        // row belongs to the INVITING tenant, not the caller's current one.
+        if (invite.ProductionId is not null)
+        {
+            _db.ProductionAccesses.Add(new ProductionAccess
+            {
+                TenantId = invite.TenantId,
+                MembershipId = membership.Id,
+                ProductionId = invite.ProductionId.Value,
+            });
+        }
+
         await _db.SaveChangesAsync();
 
         return new JoinResponse(tenantName);
+    }
+
+    // POST /api/team/members/{id}/access — grant a member access to a show (owners only).
+    [HttpPost("members/{id:int}/access")]
+    public async Task<IActionResult> GrantAccess(int id, AccessRequest input)
+    {
+        if (!_tenant.IsOwner()) return StatusCode(403);
+        var tenantId = _tenant.TenantId ?? 0;
+
+        var membership = await _db.Memberships.FirstOrDefaultAsync(m => m.Id == id && m.TenantId == tenantId);
+        if (membership is null) return NotFound();
+        var productionExists = await _db.Productions.AnyAsync(p => p.Id == input.ProductionId);
+        if (!productionExists) return BadRequest("That production doesn't exist.");
+
+        var existing = await _db.ProductionAccesses.FirstOrDefaultAsync(
+            a => a.MembershipId == id && a.ProductionId == input.ProductionId);
+        if (existing is null)
+        {
+            _db.ProductionAccesses.Add(new ProductionAccess { MembershipId = id, ProductionId = input.ProductionId });
+            await _db.SaveChangesAsync();
+        }
+        return NoContent();
+    }
+
+    // DELETE /api/team/members/{id}/access/{productionId} — revoke show access (owners only).
+    [HttpDelete("members/{id:int}/access/{productionId:int}")]
+    public async Task<IActionResult> RevokeAccess(int id, int productionId)
+    {
+        if (!_tenant.IsOwner()) return StatusCode(403);
+        var grant = await _db.ProductionAccesses.FirstOrDefaultAsync(
+            a => a.MembershipId == id && a.ProductionId == productionId);
+        if (grant is null) return NotFound();
+        _db.ProductionAccesses.Remove(grant);
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 
     // DELETE /api/team/members/{id} — remove a member from the tenant (owners only,
@@ -164,7 +230,7 @@ public class TeamController : ControllerBase
     [HttpDelete("members/{id:int}")]
     public async Task<IActionResult> RemoveMember(int id)
     {
-        if (!IsOwner) return StatusCode(403);
+        if (!_tenant.IsOwner()) return StatusCode(403);
         var tenantId = _tenant.TenantId ?? 0;
 
         var membership = await _db.Memberships.FirstOrDefaultAsync(m => m.Id == id && m.TenantId == tenantId);

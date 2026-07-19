@@ -83,6 +83,16 @@ No Clerk secret key is needed anywhere — the API validates JWTs via the
 authority's public JWKS. First sign-in auto-provisions your tenant (you become
 Owner). Team → invite code lets others join your tenant.
 
+### Access model
+
+- **Owner** (the company manager): full access to everything; creates seasons
+  and shows; grants/revokes show access; owns exports.
+- **Members** (directors, choreographers, music directors, producers…): join by
+  invite code and collaborate **at the show level** — they only see and edit the
+  productions they've been granted (an invite can carry one show; Owners grant
+  more from the Team page). The performer roster is tenant-wide (casting needs
+  it); seasons are readable but only Owners change them.
+
 ## Run
 
 VS Code: **Ctrl+Shift+B** runs the default task *Start: client + API*. Manually:

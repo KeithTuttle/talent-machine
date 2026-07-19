@@ -38,6 +38,7 @@ namespace TalentMachine.Api.Migrations
                     Code = table.Column<string>(type: "text", nullable: false),
                     Email = table.Column<string>(type: "text", nullable: true),
                     Role = table.Column<string>(type: "text", nullable: false),
+                    ProductionId = table.Column<int>(type: "integer", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     AcceptedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     AcceptedByClerkUserId = table.Column<string>(type: "text", nullable: true)
@@ -66,7 +67,7 @@ namespace TalentMachine.Api.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "People",
+                name: "Performers",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -74,13 +75,14 @@ namespace TalentMachine.Api.Migrations
                     TenantId = table.Column<int>(type: "integer", nullable: false),
                     FirstName = table.Column<string>(type: "text", nullable: false),
                     LastName = table.Column<string>(type: "text", nullable: false),
+                    Gender = table.Column<string>(type: "text", nullable: true),
                     Notes = table.Column<string>(type: "text", nullable: true),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_People", x => x.Id);
+                    table.PrimaryKey("PK_Performers", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -122,7 +124,7 @@ namespace TalentMachine.Api.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     TenantId = table.Column<int>(type: "integer", nullable: false),
                     ProductionId = table.Column<int>(type: "integer", nullable: false),
-                    PersonId = table.Column<int>(type: "integer", nullable: false),
+                    PerformerId = table.Column<int>(type: "integer", nullable: false),
                     CastGroupId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
@@ -135,9 +137,9 @@ namespace TalentMachine.Api.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
-                        name: "FK_CastMemberships_People_PersonId",
-                        column: x => x.PersonId,
-                        principalTable: "People",
+                        name: "FK_CastMemberships_Performers_PerformerId",
+                        column: x => x.PerformerId,
+                        principalTable: "Performers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -147,12 +149,12 @@ namespace TalentMachine.Api.Migrations
                 columns: table => new
                 {
                     MusicalNumberId = table.Column<int>(type: "integer", nullable: false),
-                    PersonId = table.Column<int>(type: "integer", nullable: false),
+                    PerformerId = table.Column<int>(type: "integer", nullable: false),
                     TenantId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_NumberCasts", x => new { x.MusicalNumberId, x.PersonId });
+                    table.PrimaryKey("PK_NumberCasts", x => new { x.MusicalNumberId, x.PerformerId });
                     table.ForeignKey(
                         name: "FK_NumberCasts_Numbers_MusicalNumberId",
                         column: x => x.MusicalNumberId,
@@ -160,9 +162,9 @@ namespace TalentMachine.Api.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_NumberCasts_People_PersonId",
-                        column: x => x.PersonId,
-                        principalTable: "People",
+                        name: "FK_NumberCasts_Performers_PerformerId",
+                        column: x => x.PerformerId,
+                        principalTable: "Performers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -176,7 +178,7 @@ namespace TalentMachine.Api.Migrations
                     TenantId = table.Column<int>(type: "integer", nullable: false),
                     ProductionId = table.Column<int>(type: "integer", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
-                    PersonId = table.Column<int>(type: "integer", nullable: true),
+                    PerformerId = table.Column<int>(type: "integer", nullable: true),
                     Notes = table.Column<string>(type: "text", nullable: true),
                     OrderIndex = table.Column<int>(type: "integer", nullable: false)
                 },
@@ -184,9 +186,9 @@ namespace TalentMachine.Api.Migrations
                 {
                     table.PrimaryKey("PK_Roles", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Roles_People_PersonId",
-                        column: x => x.PersonId,
-                        principalTable: "People",
+                        name: "FK_Roles_Performers_PerformerId",
+                        column: x => x.PerformerId,
+                        principalTable: "Performers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
                 });
@@ -239,6 +241,31 @@ namespace TalentMachine.Api.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "ProductionAccesses",
+                columns: table => new
+                {
+                    MembershipId = table.Column<int>(type: "integer", nullable: false),
+                    ProductionId = table.Column<int>(type: "integer", nullable: false),
+                    TenantId = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProductionAccesses", x => new { x.MembershipId, x.ProductionId });
+                    table.ForeignKey(
+                        name: "FK_ProductionAccesses_Memberships_MembershipId",
+                        column: x => x.MembershipId,
+                        principalTable: "Memberships",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ProductionAccesses_Productions_ProductionId",
+                        column: x => x.ProductionId,
+                        principalTable: "Productions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_CastGroups_TenantId",
                 table: "CastGroups",
@@ -250,14 +277,14 @@ namespace TalentMachine.Api.Migrations
                 column: "CastGroupId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_CastMemberships_PersonId",
+                name: "IX_CastMemberships_PerformerId",
                 table: "CastMemberships",
-                column: "PersonId");
+                column: "PerformerId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_CastMemberships_ProductionId_PersonId",
+                name: "IX_CastMemberships_ProductionId_PerformerId",
                 table: "CastMemberships",
-                columns: new[] { "ProductionId", "PersonId" },
+                columns: new[] { "ProductionId", "PerformerId" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -288,9 +315,9 @@ namespace TalentMachine.Api.Migrations
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_NumberCasts_PersonId",
+                name: "IX_NumberCasts_PerformerId",
                 table: "NumberCasts",
-                column: "PersonId");
+                column: "PerformerId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_NumberCasts_TenantId",
@@ -308,8 +335,18 @@ namespace TalentMachine.Api.Migrations
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_People_TenantId",
-                table: "People",
+                name: "IX_Performers_TenantId",
+                table: "Performers",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ProductionAccesses_ProductionId",
+                table: "ProductionAccesses",
+                column: "ProductionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ProductionAccesses_TenantId",
+                table: "ProductionAccesses",
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
@@ -323,9 +360,9 @@ namespace TalentMachine.Api.Migrations
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Roles_PersonId",
+                name: "IX_Roles_PerformerId",
                 table: "Roles",
-                column: "PersonId");
+                column: "PerformerId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Roles_TenantId",
@@ -353,13 +390,10 @@ namespace TalentMachine.Api.Migrations
                 name: "Invitations");
 
             migrationBuilder.DropTable(
-                name: "Memberships");
-
-            migrationBuilder.DropTable(
                 name: "NumberCasts");
 
             migrationBuilder.DropTable(
-                name: "Productions");
+                name: "ProductionAccesses");
 
             migrationBuilder.DropTable(
                 name: "Roles");
@@ -368,16 +402,22 @@ namespace TalentMachine.Api.Migrations
                 name: "CastGroups");
 
             migrationBuilder.DropTable(
-                name: "Tenants");
-
-            migrationBuilder.DropTable(
                 name: "Numbers");
 
             migrationBuilder.DropTable(
-                name: "Seasons");
+                name: "Memberships");
 
             migrationBuilder.DropTable(
-                name: "People");
+                name: "Productions");
+
+            migrationBuilder.DropTable(
+                name: "Performers");
+
+            migrationBuilder.DropTable(
+                name: "Tenants");
+
+            migrationBuilder.DropTable(
+                name: "Seasons");
         }
     }
 }

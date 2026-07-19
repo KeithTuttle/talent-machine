@@ -12,7 +12,7 @@ using TalentMachine.Api.Data;
 namespace TalentMachine.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260719032729_InitialCreate")]
+    [Migration("20260719131941_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -64,7 +64,7 @@ namespace TalentMachine.Api.Migrations
                     b.Property<int?>("CastGroupId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("PersonId")
+                    b.Property<int>("PerformerId")
                         .HasColumnType("integer");
 
                     b.Property<int>("ProductionId")
@@ -77,11 +77,11 @@ namespace TalentMachine.Api.Migrations
 
                     b.HasIndex("CastGroupId");
 
-                    b.HasIndex("PersonId");
+                    b.HasIndex("PerformerId");
 
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("ProductionId", "PersonId")
+                    b.HasIndex("ProductionId", "PerformerId")
                         .IsUnique();
 
                     b.ToTable("CastMemberships");
@@ -110,6 +110,9 @@ namespace TalentMachine.Api.Migrations
 
                     b.Property<string>("Email")
                         .HasColumnType("text");
+
+                    b.Property<int?>("ProductionId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -207,22 +210,22 @@ namespace TalentMachine.Api.Migrations
                     b.Property<int>("MusicalNumberId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("PersonId")
+                    b.Property<int>("PerformerId")
                         .HasColumnType("integer");
 
                     b.Property<int>("TenantId")
                         .HasColumnType("integer");
 
-                    b.HasKey("MusicalNumberId", "PersonId");
+                    b.HasKey("MusicalNumberId", "PerformerId");
 
-                    b.HasIndex("PersonId");
+                    b.HasIndex("PerformerId");
 
                     b.HasIndex("TenantId");
 
                     b.ToTable("NumberCasts");
                 });
 
-            modelBuilder.Entity("TalentMachine.Api.Models.Person", b =>
+            modelBuilder.Entity("TalentMachine.Api.Models.Performer", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -235,6 +238,9 @@ namespace TalentMachine.Api.Migrations
 
                     b.Property<string>("FirstName")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Gender")
                         .HasColumnType("text");
 
                     b.Property<bool>("IsActive")
@@ -254,7 +260,7 @@ namespace TalentMachine.Api.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("People");
+                    b.ToTable("Performers");
                 });
 
             modelBuilder.Entity("TalentMachine.Api.Models.Production", b =>
@@ -293,6 +299,26 @@ namespace TalentMachine.Api.Migrations
                     b.ToTable("Productions");
                 });
 
+            modelBuilder.Entity("TalentMachine.Api.Models.ProductionAccess", b =>
+                {
+                    b.Property<int>("MembershipId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TenantId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MembershipId", "ProductionId");
+
+                    b.HasIndex("ProductionId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("ProductionAccesses");
+                });
+
             modelBuilder.Entity("TalentMachine.Api.Models.Role", b =>
                 {
                     b.Property<int>("Id")
@@ -311,7 +337,7 @@ namespace TalentMachine.Api.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("PersonId")
+                    b.Property<int?>("PerformerId")
                         .HasColumnType("integer");
 
                     b.Property<int>("ProductionId")
@@ -322,7 +348,7 @@ namespace TalentMachine.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PersonId");
+                    b.HasIndex("PerformerId");
 
                     b.HasIndex("TenantId");
 
@@ -389,15 +415,15 @@ namespace TalentMachine.Api.Migrations
                         .HasForeignKey("CastGroupId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("TalentMachine.Api.Models.Person", "Person")
+                    b.HasOne("TalentMachine.Api.Models.Performer", "Performer")
                         .WithMany()
-                        .HasForeignKey("PersonId")
+                        .HasForeignKey("PerformerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("CastGroup");
 
-                    b.Navigation("Person");
+                    b.Navigation("Performer");
                 });
 
             modelBuilder.Entity("TalentMachine.Api.Models.Membership", b =>
@@ -419,15 +445,15 @@ namespace TalentMachine.Api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("TalentMachine.Api.Models.Person", "Person")
+                    b.HasOne("TalentMachine.Api.Models.Performer", "Performer")
                         .WithMany()
-                        .HasForeignKey("PersonId")
+                        .HasForeignKey("PerformerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("MusicalNumber");
 
-                    b.Navigation("Person");
+                    b.Navigation("Performer");
                 });
 
             modelBuilder.Entity("TalentMachine.Api.Models.Production", b =>
@@ -441,14 +467,33 @@ namespace TalentMachine.Api.Migrations
                     b.Navigation("Season");
                 });
 
+            modelBuilder.Entity("TalentMachine.Api.Models.ProductionAccess", b =>
+                {
+                    b.HasOne("TalentMachine.Api.Models.Membership", "Membership")
+                        .WithMany()
+                        .HasForeignKey("MembershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TalentMachine.Api.Models.Production", "Production")
+                        .WithMany()
+                        .HasForeignKey("ProductionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Production");
+                });
+
             modelBuilder.Entity("TalentMachine.Api.Models.Role", b =>
                 {
-                    b.HasOne("TalentMachine.Api.Models.Person", "Person")
+                    b.HasOne("TalentMachine.Api.Models.Performer", "Performer")
                         .WithMany()
-                        .HasForeignKey("PersonId")
+                        .HasForeignKey("PerformerId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.Navigation("Person");
+                    b.Navigation("Performer");
                 });
 
             modelBuilder.Entity("TalentMachine.Api.Models.Tenant", b =>

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TalentMachine.Api.Auth;
 using TalentMachine.Api.Data;
 using TalentMachine.Api.Models;
 
@@ -11,8 +12,13 @@ namespace TalentMachine.Api.Controllers;
 public class NumbersController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly ICurrentTenant _tenant;
 
-    public NumbersController(AppDbContext db) => _db = db;
+    public NumbersController(AppDbContext db, ICurrentTenant tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     public record ReorderRequest(int ProductionId, List<int> OrderedIds);
 
@@ -21,6 +27,9 @@ public class NumbersController : ControllerBase
     public async Task<ActionResult<IEnumerable<MusicalNumber>>> GetAll([FromQuery] int? productionId)
     {
         var query = _db.Numbers.AsQueryable();
+        var accessible = _tenant.AccessibleProductionIds;
+        if (accessible is not null)
+            query = query.Where(n => accessible.Contains(n.ProductionId));
         if (productionId is not null)
             query = query.Where(n => n.ProductionId == productionId);
         return await query.OrderBy(n => n.OrderIndex).ThenBy(n => n.Id).ToListAsync();
@@ -30,12 +39,14 @@ public class NumbersController : ControllerBase
     public async Task<ActionResult<MusicalNumber>> Get(int id)
     {
         var number = await _db.FindScopedAsync<MusicalNumber>(id);
-        return number is null ? NotFound() : number;
+        if (number is null || !_tenant.CanAccessProduction(number.ProductionId)) return NotFound();
+        return number;
     }
 
     [HttpPost]
     public async Task<ActionResult<MusicalNumber>> Create(MusicalNumber number)
     {
+        if (!_tenant.CanAccessProduction(number.ProductionId)) return StatusCode(403);
         // New numbers go to the end of the running order unless told otherwise.
         if (number.OrderIndex == 0)
         {
@@ -53,6 +64,7 @@ public class NumbersController : ControllerBase
     public async Task<IActionResult> Update(int id, MusicalNumber input)
     {
         if (id != input.Id) return BadRequest();
+        if (!_tenant.CanAccessProduction(input.ProductionId)) return NotFound();
         return await _db.UpdateScopedAsync(id, input) ? NoContent() : NotFound();
     }
 
@@ -60,6 +72,7 @@ public class NumbersController : ControllerBase
     [HttpPut("reorder")]
     public async Task<IActionResult> Reorder(ReorderRequest input)
     {
+        if (!_tenant.CanAccessProduction(input.ProductionId)) return StatusCode(403);
         var numbers = await _db.Numbers
             .Where(n => n.ProductionId == input.ProductionId)
             .ToListAsync();
@@ -78,7 +91,7 @@ public class NumbersController : ControllerBase
     public async Task<IActionResult> Delete(int id)
     {
         var number = await _db.FindScopedAsync<MusicalNumber>(id);
-        if (number is null) return NotFound();
+        if (number is null || !_tenant.CanAccessProduction(number.ProductionId)) return NotFound();
         _db.Numbers.Remove(number);
         await _db.SaveChangesAsync();
         return NoContent();

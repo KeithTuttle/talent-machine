@@ -34,9 +34,11 @@ public class ExportController : ControllerBase
     }
 
     // GET /api/export — download everything in the current tenant as JSON.
+    // Owner-only: show-level members shouldn't walk off with the whole archive.
     [HttpGet]
     public async Task<IActionResult> Get()
     {
+        if (!_tenant.IsOwner()) return StatusCode(403);
         var tenantId = _tenant.TenantId ?? 0;
         var tenantName = await _db.Tenants
             .Where(t => t.Id == tenantId)
@@ -50,7 +52,8 @@ public class ExportController : ControllerBase
             tenantName,
             seasons = await _db.Seasons.AsNoTracking().ToListAsync(),
             productions = await _db.Productions.AsNoTracking().ToListAsync(),
-            people = await _db.People.AsNoTracking().ToListAsync(),
+            performers = await _db.Performers.AsNoTracking().ToListAsync(),
+            productionAccesses = await _db.ProductionAccesses.AsNoTracking().ToListAsync(),
             castGroups = await _db.CastGroups.AsNoTracking().ToListAsync(),
             castMemberships = await _db.CastMemberships.AsNoTracking().ToListAsync(),
             roles = await _db.Roles.AsNoTracking().ToListAsync(),

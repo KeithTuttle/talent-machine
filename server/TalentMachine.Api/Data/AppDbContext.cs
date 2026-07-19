@@ -19,10 +19,13 @@ public class AppDbContext : DbContext
     // Team invites (tenant-scoped; redemption looks up by code with IgnoreQueryFilters).
     public DbSet<Invitation> Invitations => Set<Invitation>();
 
+    // Show-level access grants for Members (Owners are unrestricted).
+    public DbSet<ProductionAccess> ProductionAccesses => Set<ProductionAccess>();
+
     // Domain.
     public DbSet<Season> Seasons => Set<Season>();
     public DbSet<Production> Productions => Set<Production>();
-    public DbSet<Person> People => Set<Person>();
+    public DbSet<Performer> Performers => Set<Performer>();
     public DbSet<CastGroup> CastGroups => Set<CastGroup>();
     public DbSet<CastMembership> CastMemberships => Set<CastMembership>();
     public DbSet<Role> Roles => Set<Role>();
@@ -42,31 +45,41 @@ public class AppDbContext : DbContext
         // Store enums as strings for readability in the database.
         b.Entity<Membership>().Property(x => x.Role).HasConversion<string>();
         b.Entity<Invitation>().Property(x => x.Role).HasConversion<string>();
+        b.Entity<Performer>().Property(x => x.Gender).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
-        b.Entity<NumberCast>().HasKey(x => new { x.MusicalNumberId, x.PersonId });
+        b.Entity<NumberCast>().HasKey(x => new { x.MusicalNumberId, x.PerformerId });
+        b.Entity<ProductionAccess>().HasKey(x => new { x.MembershipId, x.ProductionId });
 
         // One Clerk user maps to exactly one membership.
         b.Entity<Membership>().HasIndex(x => x.ClerkUserId).IsUnique();
         // Join codes are redeemed by exact lookup and must be unique.
         b.Entity<Invitation>().HasIndex(x => x.Code).IsUnique();
 
-        // A person is in a production at most once.
-        b.Entity<CastMembership>().HasIndex(x => new { x.ProductionId, x.PersonId }).IsUnique();
+        // A performer is in a production at most once.
+        b.Entity<CastMembership>().HasIndex(x => new { x.ProductionId, x.PerformerId }).IsUnique();
 
-        // Deleting a cast group must NOT drop people from the show — their
+        // Deleting a cast group must NOT drop performers from the show — their
         // membership falls back to "ungrouped" (CastGroupId null).
         b.Entity<CastMembership>()
             .HasOne(x => x.CastGroup).WithMany().HasForeignKey(x => x.CastGroupId)
             .OnDelete(DeleteBehavior.SetNull);
-        // Deleting a person removes their production memberships and number casts.
+        // Deleting a performer removes their production memberships and number casts.
         b.Entity<CastMembership>()
-            .HasOne(x => x.Person).WithMany().HasForeignKey(x => x.PersonId)
+            .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
             .OnDelete(DeleteBehavior.Cascade);
-        // Deleting a person leaves their roles behind as "uncast" characters.
+        // Deleting a performer leaves their roles behind as "uncast" characters.
         b.Entity<Role>()
-            .HasOne(x => x.Person).WithMany().HasForeignKey(x => x.PersonId)
+            .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Access grants die with the member or the show.
+        b.Entity<ProductionAccess>()
+            .HasOne(x => x.Membership).WithMany().HasForeignKey(x => x.MembershipId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<ProductionAccess>()
+            .HasOne(x => x.Production).WithMany().HasForeignKey(x => x.ProductionId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Helpful lookup indexes.
         b.Entity<Season>().HasIndex(x => new { x.TenantId, x.Year });
