@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { CalendarOff, X } from 'lucide-vue-next'
+import { CalendarOff, Contact, X } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { ageOn } from '@/lib/age'
 import { conflictLabel } from '@/lib/conflicts'
 import ColorDot from '@/components/ColorDot.vue'
-import type { CastGroup, CastMembership, Conflict, LevelGroup } from '@/types'
+import type { CastGroup, CastMembership, Conflict, Guardian, LevelGroup, PerformerGuardian } from '@/types'
 
 const props = defineProps<{
   member: CastMembership | null
@@ -20,6 +20,7 @@ const emit = defineEmits<{ close: [] }>()
 const performerNotes = ref('')
 const showNotes = ref('')
 const conflicts = ref<Conflict[]>([])
+const guardians = ref<Guardian[]>([])
 
 watch(
   () => props.member,
@@ -27,11 +28,22 @@ watch(
     performerNotes.value = m?.performer?.notes ?? ''
     showNotes.value = m?.notes ?? ''
     conflicts.value = []
+    guardians.value = []
     if (m) {
-      conflicts.value = await api
-        .get<Conflict[]>(`/conflicts?productionId=${m.productionId}&performerId=${m.performerId}`)
-        .then((r) => r.data)
-        .catch(() => [])
+      const [conflictRows, links, allGuardians] = await Promise.all([
+        api
+          .get<Conflict[]>(`/conflicts?productionId=${m.productionId}&performerId=${m.performerId}`)
+          .then((r) => r.data)
+          .catch(() => [] as Conflict[]),
+        api
+          .get<PerformerGuardian[]>(`/performerguardians?performerId=${m.performerId}`)
+          .then((r) => r.data)
+          .catch(() => [] as PerformerGuardian[]),
+        api.get<Guardian[]>('/guardians').then((r) => r.data).catch(() => [] as Guardian[]),
+      ])
+      conflicts.value = conflictRows
+      const ids = new Set(links.map((l) => l.guardianId))
+      guardians.value = allGuardians.filter((g) => ids.has(g.id))
     }
   },
   { immediate: true },
@@ -100,6 +112,22 @@ async function saveShowNotes() {
         >
           <ColorDot :color="levelGroup.color" size="sm" /> {{ levelGroup.name }}
         </span>
+      </div>
+
+      <div v-if="guardians.length > 0" class="mt-4">
+        <h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <Contact class="h-3.5 w-3.5" /> Guardians
+        </h3>
+        <ul class="mt-1.5 space-y-1">
+          <li v-for="g in guardians" :key="g.id" class="text-sm">
+            <span class="font-medium">{{ g.name }}</span>
+            <span class="ml-1.5 text-xs text-muted-foreground">
+              <a v-if="g.email" :href="`mailto:${g.email}`" class="text-primary hover:underline">{{ g.email }}</a>
+              <span v-if="g.email && g.phone"> · </span>
+              <span v-if="g.phone">{{ g.phone }}</span>
+            </span>
+          </li>
+        </ul>
       </div>
 
       <label class="mt-5 block space-y-1">

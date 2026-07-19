@@ -113,6 +113,57 @@ export interface NumberCast {
   performerId: number
 }
 
+export interface Guardian {
+  id: number
+  name: string
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+}
+
+export interface PerformerGuardian {
+  performerId: number
+  guardianId: number
+}
+
+export type RehearsalType = 'Music' | 'Dance' | 'Blocking' | 'Runthrough' | 'Other'
+
+export interface Rehearsal {
+  id: number
+  productionId: number
+  /** yyyy-MM-dd */
+  date: string
+  /** HH:mm[:ss] */
+  startTime: string
+  endTime: string
+  type: RehearsalType
+  /** Null = general session; attendees come only from explicit overrides. */
+  musicalNumberId?: number | null
+  notes?: string | null
+}
+
+/** Override row: adds (isExcluded=false) or removes (true) a kid from a slot. */
+export interface RehearsalAttendee {
+  rehearsalId: number
+  performerId: number
+  isExcluded: boolean
+}
+
+export interface SuggestedSlot {
+  date: string
+  startTime: string
+  endTime: string
+  type: RehearsalType
+  musicalNumberId?: number | null
+  notes?: string | null
+}
+
+export interface SuggestResponse {
+  configured: boolean
+  ok: boolean
+  slots: SuggestedSlot[]
+}
+
 // Team management (mirrors TeamController's DTO records).
 export interface TeamMember {
   id: number

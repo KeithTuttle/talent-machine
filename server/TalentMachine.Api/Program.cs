@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TalentMachine.Api.Auth;
 using TalentMachine.Api.Data;
+using TalentMachine.Api.Services;
+
+// QuestPDF Community license (required, set once at startup).
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +33,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Per-request tenant, resolved by TenantResolutionMiddleware, read by AppDbContext.
 builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
+
+// Printable rehearsal schedules (QuestPDF).
+builder.Services.AddScoped<RehearsalPdfService>();
+// AI rehearsal-schedule suggestions via Google Gemini (free tier).
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<RehearsalAiService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(o =>

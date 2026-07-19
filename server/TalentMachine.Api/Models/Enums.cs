@@ -18,3 +18,12 @@ public enum ConflictType
     OneOff,
     Weekly,
 }
+
+public enum RehearsalType
+{
+    Music,
+    Dance,
+    Blocking,
+    Runthrough,
+    Other,
+}

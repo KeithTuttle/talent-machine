@@ -61,6 +61,10 @@ public class ExportController : ControllerBase
             numbers = await _db.Numbers.AsNoTracking().ToListAsync(),
             numberCasts = await _db.NumberCasts.AsNoTracking().ToListAsync(),
             conflicts = await _db.Conflicts.AsNoTracking().ToListAsync(),
+            guardians = await _db.Guardians.AsNoTracking().ToListAsync(),
+            performerGuardians = await _db.PerformerGuardians.AsNoTracking().ToListAsync(),
+            rehearsals = await _db.Rehearsals.AsNoTracking().ToListAsync(),
+            rehearsalAttendees = await _db.RehearsalAttendees.AsNoTracking().ToListAsync(),
         };
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(export, JsonOpts);
