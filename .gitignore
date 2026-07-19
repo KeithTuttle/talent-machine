@@ -1,0 +1,27 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+
+# Node / Vite
+node_modules/
+dist/
+*.local
+.vite/
+
+# Env & secrets — never commit real keys
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+appsettings.Development.local.json
+
+# Editor / OS
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude worktrees
+.claude/worktrees/
