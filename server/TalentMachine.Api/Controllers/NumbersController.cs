@@ -1,0 +1,86 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using TalentMachine.Api.Data;
+using TalentMachine.Api.Models;
+
+namespace TalentMachine.Api.Controllers;
+
+/// <summary>Musical numbers within a production, kept in running order.</summary>
+[ApiController]
+[Route("api/[controller]")]
+public class NumbersController : ControllerBase
+{
+    private readonly AppDbContext _db;
+
+    public NumbersController(AppDbContext db) => _db = db;
+
+    public record ReorderRequest(int ProductionId, List<int> OrderedIds);
+
+    // GET /api/numbers?productionId=
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<MusicalNumber>>> GetAll([FromQuery] int? productionId)
+    {
+        var query = _db.Numbers.AsQueryable();
+        if (productionId is not null)
+            query = query.Where(n => n.ProductionId == productionId);
+        return await query.OrderBy(n => n.OrderIndex).ThenBy(n => n.Id).ToListAsync();
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<MusicalNumber>> Get(int id)
+    {
+        var number = await _db.FindScopedAsync<MusicalNumber>(id);
+        return number is null ? NotFound() : number;
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<MusicalNumber>> Create(MusicalNumber number)
+    {
+        // New numbers go to the end of the running order unless told otherwise.
+        if (number.OrderIndex == 0)
+        {
+            var max = await _db.Numbers
+                .Where(n => n.ProductionId == number.ProductionId)
+                .MaxAsync(n => (int?)n.OrderIndex) ?? 0;
+            number.OrderIndex = max + 1;
+        }
+        _db.Numbers.Add(number);
+        await _db.SaveChangesAsync();
+        return CreatedAtAction(nameof(Get), new { id = number.Id }, number);
+    }
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, MusicalNumber input)
+    {
+        if (id != input.Id) return BadRequest();
+        return await _db.UpdateScopedAsync(id, input) ? NoContent() : NotFound();
+    }
+
+    // PUT /api/numbers/reorder — set a production's running order in one call.
+    [HttpPut("reorder")]
+    public async Task<IActionResult> Reorder(ReorderRequest input)
+    {
+        var numbers = await _db.Numbers
+            .Where(n => n.ProductionId == input.ProductionId)
+            .ToListAsync();
+        var byId = numbers.ToDictionary(n => n.Id);
+        var order = 1;
+        foreach (var id in input.OrderedIds)
+        {
+            if (byId.TryGetValue(id, out var number))
+                number.OrderIndex = order++;
+        }
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var number = await _db.FindScopedAsync<MusicalNumber>(id);
+        if (number is null) return NotFound();
+        _db.Numbers.Remove(number);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+}

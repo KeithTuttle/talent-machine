@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  The Talent Machine Company theme: deep crimson primary (from the logo's red),
+  warm neutral grays, white surfaces. shadcn-vue CSS variables; structural
+  borders over heavy shadows.
+*/
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 345 25% 12%;
+    --muted: 350 15% 96%;
+    --muted-foreground: 345 8% 45%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 345 25% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 345 25% 12%;
+    --border: 348 15% 90%;
+    --input: 348 15% 90%;
+    --primary: 343 96% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 350 15% 96%;
+    --secondary-foreground: 345 25% 12%;
+    --accent: 345 70% 96.5%;
+    --accent-foreground: 343 80% 30%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 343 96% 38%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 345 20% 9%;
+    --foreground: 350 15% 96%;
+    --muted: 345 12% 16%;
+    --muted-foreground: 348 8% 64%;
+    --popover: 345 20% 9%;
+    --popover-foreground: 350 15% 96%;
+    --card: 345 20% 9%;
+    --card-foreground: 350 15% 96%;
+    --border: 345 12% 18%;
+    --input: 345 12% 18%;
+    --primary: 343 85% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 345 12% 16%;
+    --secondary-foreground: 350 15% 96%;
+    --accent: 343 40% 18%;
+    --accent-foreground: 348 70% 88%;
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 343 85% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+}
