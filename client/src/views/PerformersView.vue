@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Plus, Trash2 } from 'lucide-vue-next'
+import { FileText, Plus, Trash2 } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
@@ -50,6 +50,14 @@ async function addPerformer() {
   lastName.value = ''
   gender.value = ''
   dateOfBirth.value = ''
+}
+
+const notesOpenFor = ref<number | null>(null)
+
+async function saveNotes(performer: Performer, e: Event) {
+  performer.notes = (e.target as HTMLTextAreaElement).value.trim() || null
+  await api.put(`/performers/${performer.id}`, performer).catch(() => {})
+  toast.success('Saved')
 }
 
 async function setDateOfBirth(performer: Performer, e: Event) {
@@ -139,8 +147,9 @@ async function removePerformer(performer: Performer) {
       <li
         v-for="performer in filtered"
         :key="performer.id"
-        class="flex items-center gap-3 px-4 py-2.5 text-sm"
+        class="px-4 py-2.5 text-sm"
       >
+        <div class="flex items-center gap-3">
         <span class="flex-1">
           {{ performer.firstName }} {{ performer.lastName }}
           <span v-if="genderLabel(performer.gender)" class="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
@@ -167,12 +176,29 @@ async function removePerformer(performer: Performer) {
           <option v-for="o in genderOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
         </select>
         <button
+          class="rounded-md p-1.5"
+          :class="performer.notes ? 'text-primary hover:bg-accent' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
+          :aria-label="`Notes for ${performer.firstName}`"
+          @click="notesOpenFor = notesOpenFor === performer.id ? null : performer.id"
+        >
+          <FileText class="h-4 w-4" />
+        </button>
+        <button
           class="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
           :aria-label="`Delete ${performer.firstName}`"
           @click="removePerformer(performer)"
         >
           <Trash2 class="h-4 w-4" />
         </button>
+        </div>
+        <textarea
+          v-if="notesOpenFor === performer.id"
+          :value="performer.notes ?? ''"
+          rows="2"
+          placeholder="Constant notes — allergies, sizes, family info… (per-show notes live in the Planner)"
+          class="mt-2 block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          @change="saveNotes(performer, $event)"
+        />
       </li>
     </ul>
   </div>

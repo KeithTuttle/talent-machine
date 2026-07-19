@@ -61,7 +61,33 @@ export interface CastMembership {
   performerId: number
   castGroupId?: number | null
   levelGroupId?: number | null
+  /** Per-show notes (constant notes live on Performer.notes). */
+  notes?: string | null
   performer?: Performer | null
+}
+
+export type ConflictType = 'OneOff' | 'Weekly'
+export type Weekday =
+  | 'Sunday'
+  | 'Monday'
+  | 'Tuesday'
+  | 'Wednesday'
+  | 'Thursday'
+  | 'Friday'
+  | 'Saturday'
+
+export interface Conflict {
+  id: number
+  productionId: number
+  performerId: number
+  type: ConflictType
+  /** yyyy-MM-dd. OneOff: range start. Weekly: recurrence start bound. */
+  startDate: string
+  /** OneOff: range end (null = single day). Weekly: recurrence end (null = open-ended). */
+  endDate?: string | null
+  /** Weekly only. */
+  weekday?: Weekday | null
+  reason?: string | null
 }
 
 export interface Role {

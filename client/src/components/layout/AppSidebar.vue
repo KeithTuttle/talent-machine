@@ -6,6 +6,7 @@ import { useScopeStore } from '@/stores/scope'
 import {
   Drama,
   Users,
+  CalendarOff,
   CalendarRange,
   UserPlus,
   ChevronsLeft,
@@ -31,6 +32,7 @@ const toggleDark = useToggle(isDark)
 
 const nav = [
   { to: '/', label: 'Planner', icon: Drama },
+  { to: '/conflicts', label: 'Conflicts', icon: CalendarOff },
   { to: '/performers', label: 'Performers', icon: Users },
   { to: '/seasons', label: 'Seasons & Shows', icon: CalendarRange },
   { to: '/team', label: 'Team', icon: UserPlus },

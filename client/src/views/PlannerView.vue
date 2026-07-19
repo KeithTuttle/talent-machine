@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronRight,
+  FileText,
   Music,
   Plus,
   Trash2,
@@ -16,6 +17,7 @@ import { ageOn } from '@/lib/age'
 import { tint } from '@/lib/colors'
 import ColorDot from '@/components/ColorDot.vue'
 import ColorPicker from '@/components/ColorPicker.vue'
+import CastMemberDrawer from '@/components/CastMemberDrawer.vue'
 import { useScopeStore } from '@/stores/scope'
 import type {
   CastGroup,
@@ -41,6 +43,10 @@ const selectedNumberId = ref<number | null>(null)
 const sideTab = ref<'cast' | 'groups' | 'levels' | 'roles'>('cast')
 /** Which grouping the casting checklist buckets by. */
 const checklistBy = ref<'cast' | 'level'>('cast')
+/** Cast member open in the per-kid drawer (notes + conflicts). */
+const drawerMember = ref<CastMembership | null>(null)
+
+const hasNotes = (m: CastMembership) => !!(m.notes || m.performer?.notes)
 
 // --- Loading -----------------------------------------------------------------
 
@@ -545,12 +551,17 @@ async function deleteRole(role: Role) {
               <li v-for="m in cast" :key="m.id" class="flex items-center gap-2 text-sm">
                 <ColorDot :color="castGroupOf(m)?.color" size="sm" />
                 <ColorDot :color="levelGroupOf(m)?.color" size="sm" />
-                <span class="flex-1 truncate">
-                  {{ performerName(m.performerId) }}
-                  <span v-if="performerAge(m.performerId) !== null" class="ml-1 text-xs text-muted-foreground">
+                <button
+                  class="flex min-w-0 flex-1 items-center gap-1 truncate text-left hover:text-primary hover:underline"
+                  :title="`Open ${performerName(m.performerId)}'s notes & conflicts`"
+                  @click="drawerMember = m"
+                >
+                  <span class="truncate">{{ performerName(m.performerId) }}</span>
+                  <span v-if="performerAge(m.performerId) !== null" class="text-xs text-muted-foreground">
                     {{ performerAge(m.performerId) }}
                   </span>
-                </span>
+                  <FileText v-if="hasNotes(m)" class="h-3 w-3 shrink-0 text-muted-foreground" />
+                </button>
                 <select
                   class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
                   :value="m.castGroupId ?? ''"
@@ -846,5 +857,13 @@ async function deleteRole(role: Role) {
         </span>
       </div>
     </div>
+
+    <CastMemberDrawer
+      :member="drawerMember"
+      :cast-group="drawerMember ? castGroupOf(drawerMember) : null"
+      :level-group="drawerMember ? levelGroupOf(drawerMember) : null"
+      :show-date="scope.selectedProduction?.showDate"
+      @close="drawerMember = null"
+    />
   </div>
 </template>

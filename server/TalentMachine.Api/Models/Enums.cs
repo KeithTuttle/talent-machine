@@ -12,3 +12,9 @@ public enum Gender
     Female,
     NonBinary,
 }
+
+public enum ConflictType
+{
+    OneOff,
+    Weekly,
+}

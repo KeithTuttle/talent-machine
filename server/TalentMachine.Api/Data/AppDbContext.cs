@@ -32,6 +32,7 @@ public class AppDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<MusicalNumber> Numbers => Set<MusicalNumber>();
     public DbSet<NumberCast> NumberCasts => Set<NumberCast>();
+    public DbSet<Conflict> Conflicts => Set<Conflict>();
 
     /// <summary>Tenant used by the query filter; 0 (matches nothing) when unresolved.</summary>
     private int CurrentTenantId => _tenant.TenantId ?? 0;
@@ -47,6 +48,8 @@ public class AppDbContext : DbContext
         b.Entity<Membership>().Property(x => x.Role).HasConversion<string>();
         b.Entity<Invitation>().Property(x => x.Role).HasConversion<string>();
         b.Entity<Performer>().Property(x => x.Gender).HasConversion<string>();
+        b.Entity<Conflict>().Property(x => x.Type).HasConversion<string>();
+        b.Entity<Conflict>().Property(x => x.Weekday).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
         b.Entity<NumberCast>().HasKey(x => new { x.MusicalNumberId, x.PerformerId });
@@ -86,7 +89,16 @@ public class AppDbContext : DbContext
             .HasOne(x => x.Production).WithMany().HasForeignKey(x => x.ProductionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Conflicts die with the show or the performer.
+        b.Entity<Conflict>()
+            .HasOne(x => x.Production).WithMany().HasForeignKey(x => x.ProductionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Conflict>()
+            .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Helpful lookup indexes.
+        b.Entity<Conflict>().HasIndex(x => new { x.ProductionId, x.PerformerId });
         b.Entity<Season>().HasIndex(x => new { x.TenantId, x.Year });
         b.Entity<MusicalNumber>().HasIndex(x => new { x.ProductionId, x.OrderIndex });
 

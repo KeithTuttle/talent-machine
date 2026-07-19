@@ -60,6 +60,7 @@ public class ExportController : ControllerBase
             roles = await _db.Roles.AsNoTracking().ToListAsync(),
             numbers = await _db.Numbers.AsNoTracking().ToListAsync(),
             numberCasts = await _db.NumberCasts.AsNoTracking().ToListAsync(),
+            conflicts = await _db.Conflicts.AsNoTracking().ToListAsync(),
         };
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(export, JsonOpts);
