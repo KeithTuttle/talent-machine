@@ -34,8 +34,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Per-request tenant, resolved by TenantResolutionMiddleware, read by AppDbContext.
 builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
 
-// Printable rehearsal schedules (QuestPDF).
+// Printable rehearsal schedules + show running order (QuestPDF).
 builder.Services.AddScoped<RehearsalPdfService>();
+builder.Services.AddScoped<ShowOrderPdfService>();
 // AI rehearsal-schedule suggestions via Google Gemini (free tier).
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<RehearsalAiService>();

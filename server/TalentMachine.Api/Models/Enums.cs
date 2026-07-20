@@ -19,6 +19,13 @@ public enum ConflictType
     Weekly,
 }
 
+public enum AttendanceStatus
+{
+    Present,
+    Absent,
+    Excused,
+}
+
 public enum RehearsalType
 {
     Music,

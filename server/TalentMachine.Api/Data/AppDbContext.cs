@@ -37,6 +37,8 @@ public class AppDbContext : DbContext
     public DbSet<PerformerGuardian> PerformerGuardians => Set<PerformerGuardian>();
     public DbSet<Rehearsal> Rehearsals => Set<Rehearsal>();
     public DbSet<RehearsalAttendee> RehearsalAttendees => Set<RehearsalAttendee>();
+    public DbSet<RehearsalAttendance> RehearsalAttendances => Set<RehearsalAttendance>();
+    public DbSet<Act> Acts => Set<Act>();
 
     /// <summary>Tenant used by the query filter; 0 (matches nothing) when unresolved.</summary>
     private int CurrentTenantId => _tenant.TenantId ?? 0;
@@ -55,12 +57,14 @@ public class AppDbContext : DbContext
         b.Entity<Conflict>().Property(x => x.Type).HasConversion<string>();
         b.Entity<Conflict>().Property(x => x.Weekday).HasConversion<string>();
         b.Entity<Rehearsal>().Property(x => x.Type).HasConversion<string>();
+        b.Entity<RehearsalAttendance>().Property(x => x.Status).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
         b.Entity<NumberCast>().HasKey(x => new { x.MusicalNumberId, x.PerformerId });
         b.Entity<ProductionAccess>().HasKey(x => new { x.MembershipId, x.ProductionId });
         b.Entity<PerformerGuardian>().HasKey(x => new { x.PerformerId, x.GuardianId });
         b.Entity<RehearsalAttendee>().HasKey(x => new { x.RehearsalId, x.PerformerId });
+        b.Entity<RehearsalAttendance>().HasKey(x => new { x.RehearsalId, x.PerformerId });
 
         // One Clerk user maps to exactly one membership.
         b.Entity<Membership>().HasIndex(x => x.ClerkUserId).IsUnique();
@@ -118,6 +122,17 @@ public class AppDbContext : DbContext
         b.Entity<RehearsalAttendee>()
             .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
             .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<RehearsalAttendance>()
+            .HasOne(x => x.Rehearsal).WithMany().HasForeignKey(x => x.RehearsalId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<RehearsalAttendance>()
+            .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Deleting an act drops its numbers to "Unassigned", never deletes them.
+        b.Entity<MusicalNumber>()
+            .HasOne(x => x.Act).WithMany().HasForeignKey(x => x.ActId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Helpful lookup indexes.
         b.Entity<Conflict>().HasIndex(x => new { x.ProductionId, x.PerformerId });

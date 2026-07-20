@@ -18,8 +18,10 @@ import { tint } from '@/lib/colors'
 import ColorDot from '@/components/ColorDot.vue'
 import ColorPicker from '@/components/ColorPicker.vue'
 import CastMemberDrawer from '@/components/CastMemberDrawer.vue'
+import CastOverviewGrid from '@/components/CastOverviewGrid.vue'
 import { useScopeStore } from '@/stores/scope'
 import type {
+  Act,
   CastGroup,
   CastMembership,
   LevelGroup,
@@ -32,6 +34,7 @@ import type {
 const scope = useScopeStore()
 
 const numbers = ref<MusicalNumber[]>([])
+const acts = ref<Act[]>([])
 const cast = ref<CastMembership[]>([])
 const groups = ref<CastGroup[]>([])
 const levelGroups = ref<LevelGroup[]>([])
@@ -41,6 +44,11 @@ const performers = ref<Performer[]>([])
 
 const selectedNumberId = ref<number | null>(null)
 const sideTab = ref<'cast' | 'groups' | 'levels' | 'roles'>('cast')
+/** Plan (numbers + casting editor) vs Overview (kids × numbers grid). */
+const view = ref<'plan' | 'overview'>(
+  (localStorage.getItem('planner.view') as 'plan' | 'overview') ?? 'plan',
+)
+watch(view, (v) => localStorage.setItem('planner.view', v))
 /** Which grouping the casting checklist buckets by. */
 const checklistBy = ref<'cast' | 'level'>('cast')
 /** Cast member open in the per-kid drawer (notes + conflicts). */
@@ -72,6 +80,7 @@ async function loadAll() {
   }
   ;[
     numbers.value,
+    acts.value,
     cast.value,
     groups.value,
     levelGroups.value,
@@ -80,6 +89,7 @@ async function loadAll() {
     performers.value,
   ] = await Promise.all([
     safeGet<MusicalNumber>(`/numbers?productionId=${pid}`),
+    safeGet<Act>(`/acts?productionId=${pid}`),
     safeGet<CastMembership>(`/castmemberships?productionId=${pid}`),
     safeGet<CastGroup>(`/castgroups?productionId=${pid}`),
     safeGet<LevelGroup>(`/levelgroups?productionId=${pid}`),
@@ -212,9 +222,7 @@ async function moveNumber(number: MusicalNumber, delta: -1 | 1) {
 
 // --- Number casting ----------------------------------------------------------
 
-async function toggleCast(performerId: number) {
-  const numberId = selectedNumberId.value
-  if (numberId === null) return
+async function toggleCastFor(numberId: number, performerId: number) {
   if (isCast(numberId, performerId)) {
     numberCasts.value = numberCasts.value.filter(
       (c) => !(c.musicalNumberId === numberId && c.performerId === performerId),
@@ -224,6 +232,11 @@ async function toggleCast(performerId: number) {
     numberCasts.value.push({ musicalNumberId: numberId, performerId })
     await api.post('/numbercast', { musicalNumberId: numberId, performerId }).catch(() => {})
   }
+}
+
+async function toggleCast(performerId: number) {
+  if (selectedNumberId.value === null) return
+  await toggleCastFor(selectedNumberId.value, performerId)
 }
 
 async function addGroupToNumber(bucket: Bucket) {
@@ -444,13 +457,42 @@ async function deleteRole(role: Role) {
       </RouterLink>
     </div>
 
-    <div v-else class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
-      <!-- LEFT: numbers list + side panels -->
-      <div class="space-y-4">
+    <div v-else class="space-y-4">
+      <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 class="font-display text-2xl font-bold">{{ scope.selectedProduction?.title }}</h1>
           <p class="text-sm text-muted-foreground">{{ scope.selectedSeason?.name }}</p>
         </div>
+        <div class="flex rounded-md border border-border text-sm">
+          <button
+            v-for="v in ([['plan', 'Plan'], ['overview', 'Overview']] as const)"
+            :key="v[0]"
+            class="px-3 py-1.5 font-medium"
+            :class="view === v[0] ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'"
+            @click="view = v[0]"
+          >
+            {{ v[1] }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Overview: the kids × numbers grid -->
+      <CastOverviewGrid
+        v-if="view === 'overview'"
+        :numbers="numbers"
+        :acts="acts"
+        :cast="cast"
+        :groups="groups"
+        :level-groups="levelGroups"
+        :number-casts="numberCasts"
+        :performer-name="performerName"
+        :performer-age="performerAge"
+        @toggle="toggleCastFor"
+      />
+
+      <div v-else class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
+      <!-- LEFT: numbers list + side panels -->
+      <div class="space-y-4">
 
         <form class="flex gap-2" @submit.prevent="addNumber">
           <input
@@ -855,6 +897,7 @@ async function deleteRole(role: Role) {
         <span class="flex items-center gap-2">
           <ChevronRight class="h-4 w-4" /> Add or select a number to edit it
         </span>
+      </div>
       </div>
     </div>
 

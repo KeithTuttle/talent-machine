@@ -99,12 +99,21 @@ export interface Role {
   orderIndex: number
 }
 
+export interface Act {
+  id: number
+  productionId: number
+  name: string
+  orderIndex: number
+}
+
 export interface MusicalNumber {
   id: number
   productionId: number
   title: string
   songwriter?: string | null
   notes?: string | null
+  /** Null = not yet placed in the running order. */
+  actId?: number | null
   orderIndex: number
 }
 
@@ -147,6 +156,14 @@ export interface RehearsalAttendee {
   rehearsalId: number
   performerId: number
   isExcluded: boolean
+}
+
+export type AttendanceStatus = 'Present' | 'Absent' | 'Excused'
+
+export interface RehearsalAttendance {
+  rehearsalId: number
+  performerId: number
+  status: AttendanceStatus
 }
 
 export interface SuggestedSlot {

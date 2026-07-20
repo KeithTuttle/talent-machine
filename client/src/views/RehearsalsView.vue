@@ -33,6 +33,7 @@ import RehearsalEmailDialog from '@/components/RehearsalEmailDialog.vue'
 import RehearsalSuggestDialog from '@/components/RehearsalSuggestDialog.vue'
 import { useScopeStore } from '@/stores/scope'
 import type {
+  AttendanceStatus,
   CastMembership,
   Conflict,
   Guardian,
@@ -40,6 +41,7 @@ import type {
   NumberCast,
   PerformerGuardian,
   Rehearsal,
+  RehearsalAttendance,
   RehearsalAttendee,
   RehearsalType,
 } from '@/types'
@@ -54,8 +56,9 @@ const numberCasts = ref<NumberCast[]>([])
 const conflicts = ref<Conflict[]>([])
 const guardians = ref<Guardian[]>([])
 const guardianLinks = ref<PerformerGuardian[]>([])
+const attendance = ref<RehearsalAttendance[]>([])
 
-const lens = ref<'list' | 'calendar'>('list')
+const lens = ref<'list' | 'calendar' | 'attendance'>('list')
 const search = ref('')
 const typeFilter = ref<'' | RehearsalType>('')
 const emailOpen = ref(false)
@@ -83,6 +86,7 @@ async function loadAll() {
     cast.value = []
     numberCasts.value = []
     conflicts.value = []
+    attendance.value = []
     return
   }
   ;[
@@ -94,6 +98,7 @@ async function loadAll() {
     conflicts.value,
     guardians.value,
     guardianLinks.value,
+    attendance.value,
   ] = await Promise.all([
     safeGet<Rehearsal>(`/rehearsals?productionId=${pid}`),
     safeGet<RehearsalAttendee>(`/rehearsalattendees?productionId=${pid}`),
@@ -103,6 +108,7 @@ async function loadAll() {
     safeGet<Conflict>(`/conflicts?productionId=${pid}`),
     safeGet<Guardian>('/guardians'),
     safeGet<PerformerGuardian>('/performerguardians'),
+    safeGet<RehearsalAttendance>(`/rehearsalattendance?productionId=${pid}`),
   ])
 }
 onMounted(loadAll)
@@ -244,6 +250,98 @@ const addableTo = (s: Rehearsal) => {
   return cast.value.filter((m) => !attending.has(m.performerId))
 }
 
+// --- Attendance --------------------------------------------------------------
+
+const ATTENDANCE_STATUSES: AttendanceStatus[] = ['Present', 'Absent', 'Excused']
+
+const statusOf = (rehearsalId: number, performerId: number): AttendanceStatus | null =>
+  attendance.value.find((a) => a.rehearsalId === rehearsalId && a.performerId === performerId)
+    ?.status ?? null
+
+const hasConflictOn = (performerId: number, date: string) =>
+  conflictedAttendees([performerId], date, conflicts.value).length > 0
+
+async function mark(s: Rehearsal, performerId: number, status: AttendanceStatus) {
+  // Tapping the active status unsets it (back to unrecorded).
+  if (statusOf(s.id, performerId) === status) {
+    attendance.value = attendance.value.filter(
+      (a) => !(a.rehearsalId === s.id && a.performerId === performerId),
+    )
+    await api.delete(`/rehearsalattendance?rehearsalId=${s.id}&performerId=${performerId}`).catch(() => {})
+    return
+  }
+  const existing = attendance.value.find(
+    (a) => a.rehearsalId === s.id && a.performerId === performerId,
+  )
+  if (existing) existing.status = status
+  else attendance.value.push({ rehearsalId: s.id, performerId, status })
+  await api.post('/rehearsalattendance', { rehearsalId: s.id, performerId, status }).catch(() => {})
+}
+
+/** One tap: everyone Present, except kids whose conflict hits the date → Excused. */
+async function markAll(s: Rehearsal) {
+  const jobs: Promise<unknown>[] = []
+  for (const pid of attendeesOf(s)) {
+    const status: AttendanceStatus = hasConflictOn(pid, s.date) ? 'Excused' : 'Present'
+    const existing = attendance.value.find((a) => a.rehearsalId === s.id && a.performerId === pid)
+    if (existing) existing.status = status
+    else attendance.value.push({ rehearsalId: s.id, performerId: pid, status })
+    jobs.push(api.post('/rehearsalattendance', { rehearsalId: s.id, performerId: pid, status }).catch(() => {}))
+  }
+  await Promise.all(jobs)
+  toast.success('Attendance recorded')
+}
+
+const isUnexcused = (s: Rehearsal, performerId: number) =>
+  statusOf(s.id, performerId) === 'Absent' && !hasConflictOn(performerId, s.date)
+
+/** Per-kid summary across all recorded attendance in this production. */
+interface AttendanceSummaryRow {
+  performerId: number
+  present: number
+  absent: number
+  excused: number
+  unexcused: number
+  pctPresent: number | null
+}
+const attendanceSort = ref<'name' | 'pct' | 'unexcused'>('name')
+const slotById = computed(() => new Map(slots.value.map((s) => [s.id, s])))
+
+const attendanceSummary = computed<AttendanceSummaryRow[]>(() => {
+  const q = search.value.trim().toLowerCase()
+  const rows = cast.value
+    .filter((m) => {
+      if (q && !performerName(m.performerId).toLowerCase().includes(q)) return false
+      return true
+    })
+    .map((m) => {
+      const records = attendance.value.filter((a) => a.performerId === m.performerId)
+      const present = records.filter((a) => a.status === 'Present').length
+      const absent = records.filter((a) => a.status === 'Absent').length
+      const excused = records.filter((a) => a.status === 'Excused').length
+      const unexcused = records.filter((a) => {
+        if (a.status !== 'Absent') return false
+        const slot = slotById.value.get(a.rehearsalId)
+        return slot ? !hasConflictOn(a.performerId, slot.date) : true
+      }).length
+      const recorded = present + absent + excused
+      return {
+        performerId: m.performerId,
+        present,
+        absent,
+        excused,
+        unexcused,
+        pctPresent: recorded > 0 ? Math.round((present / recorded) * 100) : null,
+      }
+    })
+  return rows.sort((a, b) => {
+    if (attendanceSort.value === 'pct')
+      return (a.pctPresent ?? 101) - (b.pctPresent ?? 101)
+    if (attendanceSort.value === 'unexcused') return b.unexcused - a.unexcused
+    return performerName(a.performerId).localeCompare(performerName(b.performerId))
+  })
+})
+
 // --- PDF / Email / AI --------------------------------------------------------
 
 async function downloadPdf() {
@@ -364,7 +462,7 @@ const slotsOnDate = (iso: string) =>
         </div>
         <div class="flex rounded-md border border-border text-sm">
           <button
-            v-for="l in ([['list', 'List'], ['calendar', 'Calendar']] as const)"
+            v-for="l in ([['list', 'List'], ['calendar', 'Calendar'], ['attendance', 'Attendance']] as const)"
             :key="l[0]"
             class="px-3 py-1.5 font-medium"
             :class="lens === l[0] ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'"
@@ -498,9 +596,99 @@ const slotsOnDate = (iso: string) =>
                   </option>
                 </select>
               </div>
+
+              <!-- Attendance -->
+              <div v-if="attendeesOf(s).size > 0" class="space-y-1.5 border-t border-border pt-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Attendance</span>
+                  <button
+                    class="rounded-md border border-border px-2 py-0.5 text-xs font-medium hover:bg-accent"
+                    title="Everyone Present; kids with a conflict this day get Excused"
+                    @click="markAll(s)"
+                  >
+                    Mark all
+                  </button>
+                </div>
+                <div
+                  v-for="pid in [...attendeesOf(s)].sort((a, b) => performerName(a).localeCompare(performerName(b)))"
+                  :key="pid"
+                  class="flex items-center gap-2 text-xs"
+                >
+                  <span class="w-40 truncate">{{ performerName(pid) }}</span>
+                  <span class="flex gap-1">
+                    <button
+                      v-for="st in ATTENDANCE_STATUSES"
+                      :key="st"
+                      class="rounded px-1.5 py-0.5 font-medium"
+                      :class="
+                        statusOf(s.id, pid) === st
+                          ? st === 'Present'
+                            ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                            : st === 'Absent'
+                              ? 'bg-destructive/20 text-destructive'
+                              : 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground hover:bg-accent'
+                      "
+                      @click="mark(s, pid, st)"
+                    >
+                      {{ st[0] }}
+                    </button>
+                  </span>
+                  <span v-if="isUnexcused(s, pid)" class="font-medium text-destructive">unexcused</span>
+                  <span v-else-if="hasConflictOn(pid, s.date)" class="text-muted-foreground">conflict this day</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- ============ Attendance lens ============ -->
+      <div v-else-if="lens === 'attendance'" class="space-y-3">
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+          Sort by
+          <select v-model="attendanceSort" class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none">
+            <option value="name">Name</option>
+            <option value="pct">% present (lowest first)</option>
+            <option value="unexcused">Unexcused absences</option>
+          </select>
+        </div>
+        <p v-if="attendanceSummary.length === 0" class="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          No cast yet.
+        </p>
+        <div v-else class="overflow-x-auto rounded-lg border border-border">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-xs text-muted-foreground">
+                <th class="px-4 py-2 font-semibold">Performer</th>
+                <th class="px-2 py-2 text-center font-semibold">Present</th>
+                <th class="px-2 py-2 text-center font-semibold">Absent</th>
+                <th class="px-2 py-2 text-center font-semibold">Excused</th>
+                <th class="px-2 py-2 text-center font-semibold">% present</th>
+                <th class="px-2 py-2 text-center font-semibold">Unexcused</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in attendanceSummary" :key="row.performerId" class="border-b border-border last:border-b-0">
+                <td class="px-4 py-1.5">{{ performerName(row.performerId) }}</td>
+                <td class="px-2 py-1.5 text-center tabular-nums">{{ row.present }}</td>
+                <td class="px-2 py-1.5 text-center tabular-nums">{{ row.absent }}</td>
+                <td class="px-2 py-1.5 text-center tabular-nums">{{ row.excused }}</td>
+                <td class="px-2 py-1.5 text-center tabular-nums">
+                  {{ row.pctPresent === null ? '—' : `${row.pctPresent}%` }}
+                </td>
+                <td class="px-2 py-1.5 text-center tabular-nums">
+                  <span v-if="row.unexcused > 0" class="font-semibold text-destructive">{{ row.unexcused }}</span>
+                  <span v-else class="text-muted-foreground">0</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-muted-foreground">
+          "Unexcused" = marked Absent with no recorded conflict that day. Mark attendance
+          from each rehearsal in the List lens.
+        </p>
       </div>
 
       <!-- ============ Calendar lens ============ -->

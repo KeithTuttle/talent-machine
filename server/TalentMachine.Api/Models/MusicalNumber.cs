@@ -12,5 +12,9 @@ public class MusicalNumber : ITenantScoped
     public string Title { get; set; } = string.Empty;
     public string? Songwriter { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Which act this number belongs to; null = not yet in the running order.</summary>
+    public int? ActId { get; set; }
     public int OrderIndex { get; set; }
+
+    public Act? Act { get; set; }
 }
