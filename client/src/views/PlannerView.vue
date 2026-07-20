@@ -358,7 +358,7 @@ async function deleteRole(role: Role) {
 </script>
 
 <template>
-  <div class="p-6">
+  <div class="flex h-full flex-col p-6">
     <!-- Empty scope state -->
     <div
       v-if="scope.selectedProductionId === null"
@@ -377,8 +377,8 @@ async function deleteRole(role: Role) {
       </RouterLink>
     </div>
 
-    <div v-else class="space-y-4">
-      <div class="flex flex-wrap items-end justify-between gap-3">
+    <div v-else class="flex min-h-0 flex-1 flex-col gap-4">
+      <div class="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <div>
           <h1 class="font-display text-2xl font-bold">{{ scope.selectedProduction?.title }}</h1>
           <p class="text-sm text-muted-foreground">{{ scope.selectedSeason?.name }}</p>
@@ -396,8 +396,8 @@ async function deleteRole(role: Role) {
         </div>
       </div>
 
-      <!-- Overview: the kids × numbers grid (fills the viewport height) -->
-      <div v-if="view === 'overview'" class="flex h-[calc(100vh-10.5rem)] min-h-[24rem] flex-col">
+      <!-- Overview: the kids × numbers grid (fills the remaining height) -->
+      <div v-if="view === 'overview'" class="flex min-h-0 flex-1 flex-col">
         <CastOverviewGrid
           :numbers="numbers"
           :acts="acts"
@@ -411,7 +411,7 @@ async function deleteRole(role: Role) {
         />
       </div>
 
-      <div v-else class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
+      <div v-else class="grid min-h-0 flex-1 gap-6 overflow-y-auto lg:grid-cols-[minmax(0,22rem)_1fr]">
       <!-- LEFT: numbers list + side panels -->
       <div class="space-y-4">
 

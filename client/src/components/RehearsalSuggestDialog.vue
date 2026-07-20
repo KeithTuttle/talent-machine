@@ -123,23 +123,26 @@ async function save() {
           the kids' conflicts. Everything stays editable before you add it.
         </DialogDescription>
 
+        <div class="mt-4 flex flex-wrap items-center gap-3 text-sm">
+          <label class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            From
+            <input v-model="fromDate" type="date" class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+          </label>
+          <label class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            To
+            <input v-model="toDate" type="date" class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+          </label>
+        </div>
+
         <textarea
           v-model="prompt"
           rows="2"
           placeholder='e.g. "This Saturday 8am–12pm, work Tomorrow and the finale, music first then dance"'
-          class="mt-4 block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          class="mt-2 block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
-        <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
-          <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-            From
-            <input v-model="fromDate" type="date" class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none" />
-          </label>
-          <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-            To
-            <input v-model="toDate" type="date" class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none" />
-          </label>
+        <div class="mt-2 flex justify-end">
           <button
-            class="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            class="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             :disabled="loading"
             @click="suggest"
           >
