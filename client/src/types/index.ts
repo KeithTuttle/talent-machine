@@ -12,8 +12,8 @@ export interface Production {
   id: number
   seasonId: number
   title: string
-  /** Opening/performance date (yyyy-MM-dd); ages are computed as of this date. */
-  showDate?: string | null
+  /** Opening date (yyyy-MM-dd); ages are computed as of this date. */
+  openingDate?: string | null
   notes?: string | null
   isArchived: boolean
   createdAt: string
@@ -119,6 +119,29 @@ export interface Guardian {
 export interface PerformerGuardian {
   performerId: number
   guardianId: number
+}
+
+export interface StaffMember {
+  id: number
+  name: string
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+}
+
+export type StaffRole = 'Director' | 'Choreographer' | 'MusicDirector' | 'Producer'
+export const STAFF_ROLES: StaffRole[] = ['Director', 'Choreographer', 'MusicDirector', 'Producer']
+export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
+  Director: 'Director',
+  Choreographer: 'Choreographer',
+  MusicDirector: 'Music Director',
+  Producer: 'Producer',
+}
+
+export interface ProductionStaff {
+  productionId: number
+  staffMemberId: number
+  role: StaffRole
 }
 
 export type RehearsalType = 'Music' | 'Dance' | 'Blocking' | 'Runthrough' | 'Other'

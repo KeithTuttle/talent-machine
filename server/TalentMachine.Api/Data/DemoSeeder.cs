@@ -63,13 +63,13 @@ public class DemoSeeder : IHostedService
         {
             SeasonId = s2025.Id,
             Title = "Seussical JR.",
-            ShowDate = new DateOnly(today.Year - 1, 7, 26),
+            OpeningDate = new DateOnly(today.Year - 1, 7, 26),
         };
         var annie = new Production
         {
             SeasonId = s2026.Id,
             Title = "Annie JR.",
-            ShowDate = today.AddDays(35),
+            OpeningDate = today.AddDays(35),
             Notes = "Two performances; tech week starts two weeks out.",
         };
         db.Productions.AddRange(seussical, annie);
@@ -155,6 +155,26 @@ public class DemoSeeder : IHostedService
             new Role { ProductionId = annie.Id, Name = "Daddy Warbucks", PerformerId = kids[8].Id, OrderIndex = 3 },
             new Role { ProductionId = annie.Id, Name = "Grace Farrell", PerformerId = kids[5].Id, OrderIndex = 4 },
             new Role { ProductionId = annie.Id, Name = "Rooster", OrderIndex = 5 });
+        await db.SaveChangesAsync();
+
+        // --- Staff directory + creative team --------------------------------
+        var staff = new List<StaffMember>
+        {
+            new() { Name = "Rebecca Hall", Email = "rebecca.hall@example.com", Phone = "410-555-0200" },
+            new() { Name = "Marcus Lee", Email = "marcus.lee@example.com", Phone = "410-555-0201" },
+            new() { Name = "Priya Anand", Email = "priya.anand@example.com" },
+            new() { Name = "Tom Becker", Email = "tom.becker@example.com", Phone = "410-555-0203" },
+        };
+        db.StaffMembers.AddRange(staff);
+        await db.SaveChangesAsync();
+
+        db.ProductionStaff.AddRange(
+            new ProductionStaff { ProductionId = annie.Id, StaffMemberId = staff[0].Id, Role = StaffRole.Director },
+            new ProductionStaff { ProductionId = annie.Id, StaffMemberId = staff[1].Id, Role = StaffRole.Choreographer },
+            new ProductionStaff { ProductionId = annie.Id, StaffMemberId = staff[2].Id, Role = StaffRole.MusicDirector },
+            new ProductionStaff { ProductionId = annie.Id, StaffMemberId = staff[3].Id, Role = StaffRole.Producer },
+            // Rebecca also directed last year's show (returning-people history).
+            new ProductionStaff { ProductionId = seussical.Id, StaffMemberId = staff[0].Id, Role = StaffRole.Director });
         await db.SaveChangesAsync();
 
         // --- Acts + numbers + casting ---------------------------------------

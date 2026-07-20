@@ -38,6 +38,8 @@ public class AppDbContext : DbContext
     public DbSet<RehearsalAttendee> RehearsalAttendees => Set<RehearsalAttendee>();
     public DbSet<RehearsalAttendance> RehearsalAttendances => Set<RehearsalAttendance>();
     public DbSet<Act> Acts => Set<Act>();
+    public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
+    public DbSet<ProductionStaff> ProductionStaff => Set<ProductionStaff>();
 
     /// <summary>Tenant used by the query filter; 0 (matches nothing) when unresolved.</summary>
     private int CurrentTenantId => _tenant.TenantId ?? 0;
@@ -61,6 +63,7 @@ public class AppDbContext : DbContext
         b.Entity<Conflict>().Property(x => x.Weekday).HasConversion<string>();
         b.Entity<Rehearsal>().Property(x => x.Type).HasConversion<string>();
         b.Entity<RehearsalAttendance>().Property(x => x.Status).HasConversion<string>();
+        b.Entity<ProductionStaff>().Property(x => x.Role).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
         b.Entity<NumberCast>().HasKey(x => new { x.MusicalNumberId, x.PerformerId });
@@ -68,6 +71,7 @@ public class AppDbContext : DbContext
         b.Entity<PerformerGuardian>().HasKey(x => new { x.PerformerId, x.GuardianId });
         b.Entity<RehearsalAttendee>().HasKey(x => new { x.RehearsalId, x.PerformerId });
         b.Entity<RehearsalAttendance>().HasKey(x => new { x.RehearsalId, x.PerformerId });
+        b.Entity<ProductionStaff>().HasKey(x => new { x.ProductionId, x.StaffMemberId, x.Role });
 
         // One Clerk user maps to exactly one membership.
         b.Entity<Membership>().HasIndex(x => x.ClerkUserId).IsUnique();
@@ -132,6 +136,14 @@ public class AppDbContext : DbContext
         b.Entity<MusicalNumber>()
             .HasOne(x => x.Act).WithMany().HasForeignKey(x => x.ActId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Creative-team assignments die with the show or the staff member.
+        b.Entity<ProductionStaff>()
+            .HasOne(x => x.Production).WithMany().HasForeignKey(x => x.ProductionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<ProductionStaff>()
+            .HasOne(x => x.StaffMember).WithMany().HasForeignKey(x => x.StaffMemberId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Helpful lookup indexes.
         b.Entity<Conflict>().HasIndex(x => new { x.ProductionId, x.PerformerId });

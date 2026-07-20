@@ -9,7 +9,7 @@ namespace TalentMachine.Api.Services;
 public class ShowOrderData
 {
     public string ProductionTitle { get; set; } = string.Empty;
-    public DateOnly? ShowDate { get; set; }
+    public DateOnly? OpeningDate { get; set; }
     public List<Act> Acts { get; set; } = new();
     public List<MusicalNumber> Numbers { get; set; } = new();
     public List<NumberCast> NumberCasts { get; set; } = new();
@@ -61,10 +61,10 @@ public class ShowOrderPdfService
                     col.Item().Text(t =>
                     {
                         t.Span(data.ProductionTitle).FontColor(Colors.Grey.Medium);
-                        if (data.ShowDate is not null)
+                        if (data.OpeningDate is not null)
                         {
                             t.Span("   •   ").FontColor(Colors.Grey.Medium);
-                            t.Span(data.ShowDate.Value.ToString("MMMM d, yyyy")).FontColor(Colors.Grey.Medium);
+                            t.Span(data.OpeningDate.Value.ToString("MMMM d, yyyy")).FontColor(Colors.Grey.Medium);
                         }
                     });
                     col.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);

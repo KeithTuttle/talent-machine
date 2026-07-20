@@ -12,7 +12,7 @@ import type { CastGroup, CastMembership, Conflict, Guardian, PerformerGuardian }
 const props = defineProps<{
   member: CastMembership | null
   castGroup: CastGroup | null
-  showDate?: string | null
+  openingDate?: string | null
 }>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -48,7 +48,7 @@ watch(
   { immediate: true },
 )
 
-const age = computed(() => ageOn(props.member?.performer?.dateOfBirth, props.showDate))
+const age = computed(() => ageOn(props.member?.performer?.dateOfBirth, props.openingDate))
 
 const genderLabel = computed(() => {
   const g = props.member?.performer?.gender

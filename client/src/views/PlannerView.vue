@@ -113,7 +113,7 @@ const performerAge = (id: number) => {
   const p =
     cast.value.find((m) => m.performerId === id)?.performer ??
     performers.value.find((x) => x.id === id)
-  return ageOn(p?.dateOfBirth, scope.selectedProduction?.showDate)
+  return ageOn(p?.dateOfBirth, scope.selectedProduction?.openingDate)
 }
 
 const castGroupOf = (m: CastMembership) => groups.value.find((g) => g.id === m.castGroupId) ?? null
@@ -726,7 +726,7 @@ async function deleteRole(role: Role) {
     <CastMemberDrawer
       :member="drawerMember"
       :cast-group="drawerMember ? castGroupOf(drawerMember) : null"
-      :show-date="scope.selectedProduction?.showDate"
+      :show-date="scope.selectedProduction?.openingDate"
       @close="drawerMember = null"
     />
   </div>

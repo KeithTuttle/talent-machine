@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Contact, FileText, Plus, Trash2, X } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
@@ -9,10 +9,6 @@ import type { Gender, Guardian, Performer, PerformerGuardian } from '@/types'
 
 const performers = ref<Performer[]>([])
 const search = ref('')
-const firstName = ref('')
-const lastName = ref('')
-const gender = ref<Gender | ''>('')
-const dateOfBirth = ref('')
 
 const genderOptions: { value: Gender; label: string }[] = [
   { value: 'Male', label: 'M' },
@@ -32,100 +28,93 @@ onMounted(async () => {
   ])
 })
 
-// --- Guardians ---------------------------------------------------------------
+// --- Add form (collapsible; captures guardian + notes in one step) -----------
 
-const guardiansOpenFor = ref<number | null>(null)
-const linkGuardianId = ref<number | ''>('')
-const newGuardianName = ref('')
-const newGuardianEmail = ref('')
-const newGuardianPhone = ref('')
+const addOpen = ref(false)
+const form = ref({
+  firstName: '',
+  lastName: '',
+  gender: '' as Gender | '',
+  dateOfBirth: '',
+  notes: '',
+  guardianName: '',
+  guardianEmail: '',
+  guardianPhone: '',
+})
 
-const guardiansOf = (performerId: number) =>
-  guardianLinks.value
-    .filter((l) => l.performerId === performerId)
-    .map((l) => guardians.value.find((g) => g.id === l.guardianId))
-    .filter((g): g is Guardian => !!g)
-
-const linkableFor = (performerId: number) =>
-  guardians.value.filter((g) => !guardiansOf(performerId).some((x) => x.id === g.id))
-
-async function linkGuardian(performerId: number) {
-  if (linkGuardianId.value === '') return
-  const guardianId = linkGuardianId.value
-  guardianLinks.value.push({ performerId, guardianId })
-  linkGuardianId.value = ''
-  await api.post('/performerguardians', { performerId, guardianId }).catch(() => {})
+function resetForm() {
+  form.value = {
+    firstName: '', lastName: '', gender: '', dateOfBirth: '', notes: '',
+    guardianName: '', guardianEmail: '', guardianPhone: '',
+  }
 }
 
-async function createGuardian(performerId: number) {
-  const name = newGuardianName.value.trim()
-  if (!name) return
-  const { data } = await api.post<Guardian>('/guardians', {
+async function addPerformer() {
+  const f = form.value
+  if (!f.firstName.trim()) return
+  const { data: performer } = await api.post<Performer>('/performers', {
     id: 0,
-    name,
-    email: newGuardianEmail.value.trim() || null,
-    phone: newGuardianPhone.value.trim() || null,
+    firstName: f.firstName.trim(),
+    lastName: f.lastName.trim(),
+    gender: f.gender || null,
+    dateOfBirth: f.dateOfBirth || null,
+    notes: f.notes.trim() || null,
+    isActive: true,
+    createdAt: new Date().toISOString(),
   })
-  guardians.value.push(data)
-  guardianLinks.value.push({ performerId, guardianId: data.id })
-  await api.post('/performerguardians', { performerId, guardianId: data.id }).catch(() => {})
-  newGuardianName.value = ''
-  newGuardianEmail.value = ''
-  newGuardianPhone.value = ''
-  toast.success(`${data.name} linked`)
+  performers.value.push(performer)
+
+  if (f.guardianName.trim()) {
+    const { data: guardian } = await api.post<Guardian>('/guardians', {
+      id: 0,
+      name: f.guardianName.trim(),
+      email: f.guardianEmail.trim() || null,
+      phone: f.guardianPhone.trim() || null,
+    })
+    guardians.value.push(guardian)
+    guardianLinks.value.push({ performerId: performer.id, guardianId: guardian.id })
+    await api.post('/performerguardians', { performerId: performer.id, guardianId: guardian.id }).catch(() => {})
+  }
+
+  toast.success(`${performer.firstName} added`)
+  resetForm()
 }
 
-async function unlinkGuardian(performerId: number, guardianId: number) {
-  guardianLinks.value = guardianLinks.value.filter(
-    (l) => !(l.performerId === performerId && l.guardianId === guardianId),
-  )
-  await api.delete(`/performerguardians?performerId=${performerId}&guardianId=${guardianId}`).catch(() => {})
+// --- Rows (collapsible) ------------------------------------------------------
+
+const openRows = ref<Set<number>>(new Set())
+function toggleRow(id: number) {
+  const s = openRows.value
+  s.has(id) ? s.delete(id) : s.add(id)
+  openRows.value = new Set(s)
 }
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
-  if (!q) return performers.value
-  return performers.value.filter((p) =>
-    `${p.firstName} ${p.lastName}`.toLowerCase().includes(q),
+  const list = q
+    ? performers.value.filter((p) => `${p.firstName} ${p.lastName}`.toLowerCase().includes(q))
+    : performers.value
+  return [...list].sort((a, b) =>
+    (a.lastName + a.firstName).localeCompare(b.lastName + b.firstName),
   )
 })
 
-async function addPerformer() {
-  if (!firstName.value.trim()) return
-  const { data } = await api.post<Performer>('/performers', {
-    id: 0,
-    firstName: firstName.value.trim(),
-    lastName: lastName.value.trim(),
-    gender: gender.value || null,
-    dateOfBirth: dateOfBirth.value || null,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  })
-  performers.value.push(data)
-  toast.success(`${data.firstName} added`)
-  firstName.value = ''
-  lastName.value = ''
-  gender.value = ''
-  dateOfBirth.value = ''
+// --- Per-performer edits -----------------------------------------------------
+
+async function savePerformer(performer: Performer) {
+  await api.put(`/performers/${performer.id}`, performer).catch(() => {})
 }
-
-const notesOpenFor = ref<number | null>(null)
-
 async function saveNotes(performer: Performer, e: Event) {
   performer.notes = (e.target as HTMLTextAreaElement).value.trim() || null
-  await api.put(`/performers/${performer.id}`, performer).catch(() => {})
-  toast.success('Saved')
+  await savePerformer(performer)
 }
-
 async function setDateOfBirth(performer: Performer, e: Event) {
   performer.dateOfBirth = (e.target as HTMLInputElement).value || null
-  await api.put(`/performers/${performer.id}`, performer).catch(() => {})
+  await savePerformer(performer)
 }
-
 async function setGender(performer: Performer, e: Event) {
-  const raw = (e.target as HTMLSelectElement).value
-  performer.gender = (raw || null) as Gender | null
-  await api.put(`/performers/${performer.id}`, performer).catch(() => {})
+  performer.gender = ((e.target as HTMLSelectElement).value || null) as Gender | null
+  await savePerformer(performer)
 }
 
 async function removePerformer(performer: Performer) {
@@ -139,56 +128,104 @@ async function removePerformer(performer: Performer) {
   await api.delete(`/performers/${performer.id}`)
   performers.value = performers.value.filter((p) => p.id !== performer.id)
 }
+
+// --- Guardians ---------------------------------------------------------------
+
+const linkGuardianId = ref<Record<number, number | ''>>({})
+const newGuardian = ref<Record<number, { name: string; email: string; phone: string }>>({})
+const gFor = (id: number) => (newGuardian.value[id] ??= { name: '', email: '', phone: '' })
+
+const guardiansOf = (performerId: number) =>
+  guardianLinks.value
+    .filter((l) => l.performerId === performerId)
+    .map((l) => guardians.value.find((g) => g.id === l.guardianId))
+    .filter((g): g is Guardian => !!g)
+
+const linkableFor = (performerId: number) =>
+  guardians.value.filter((g) => !guardiansOf(performerId).some((x) => x.id === g.id))
+
+async function linkGuardian(performerId: number) {
+  const guardianId = linkGuardianId.value[performerId]
+  if (!guardianId) return
+  guardianLinks.value.push({ performerId, guardianId })
+  linkGuardianId.value[performerId] = ''
+  await api.post('/performerguardians', { performerId, guardianId }).catch(() => {})
+}
+
+async function createGuardian(performerId: number) {
+  const g = gFor(performerId)
+  if (!g.name.trim()) return
+  const { data } = await api.post<Guardian>('/guardians', {
+    id: 0,
+    name: g.name.trim(),
+    email: g.email.trim() || null,
+    phone: g.phone.trim() || null,
+  })
+  guardians.value.push(data)
+  guardianLinks.value.push({ performerId, guardianId: data.id })
+  await api.post('/performerguardians', { performerId, guardianId: data.id }).catch(() => {})
+  newGuardian.value[performerId] = { name: '', email: '', phone: '' }
+  toast.success(`${data.name} linked`)
+}
+
+async function unlinkGuardian(performerId: number, guardianId: number) {
+  guardianLinks.value = guardianLinks.value.filter(
+    (l) => !(l.performerId === performerId && l.guardianId === guardianId),
+  )
+  await api.delete(`/performerguardians?performerId=${performerId}&guardianId=${guardianId}`).catch(() => {})
+}
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl space-y-6 p-6">
-    <div>
-      <h1 class="font-display text-2xl font-bold">Performers</h1>
-      <p class="text-sm text-muted-foreground">
-        Your company's performers across all seasons — one record each, history spans years.
-      </p>
-    </div>
-
-    <form class="flex flex-wrap items-end gap-2 rounded-lg border border-border p-4" @submit.prevent="addPerformer">
-      <label class="flex-1 space-y-1">
-        <span class="text-xs font-medium text-muted-foreground">First name</span>
-        <input
-          v-model="firstName"
-          class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </label>
-      <label class="flex-1 space-y-1">
-        <span class="text-xs font-medium text-muted-foreground">Last name</span>
-        <input
-          v-model="lastName"
-          class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </label>
-      <label class="space-y-1">
-        <span class="text-xs font-medium text-muted-foreground">Date of birth</span>
-        <input
-          v-model="dateOfBirth"
-          type="date"
-          class="block rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </label>
-      <label class="space-y-1">
-        <span class="text-xs font-medium text-muted-foreground">Gender</span>
-        <select
-          v-model="gender"
-          class="block w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          <option value="">—</option>
-          <option v-for="o in genderOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-        </select>
-      </label>
+  <div class="mx-auto max-w-3xl space-y-5 p-6">
+    <div class="flex items-end justify-between gap-3">
+      <div>
+        <h1 class="font-display text-2xl font-bold">Performers</h1>
+        <p class="text-sm text-muted-foreground">
+          Your company's performers across all seasons — one record each, history spans years.
+        </p>
+      </div>
       <button
-        type="submit"
-        class="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+        class="flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+        @click="addOpen = !addOpen"
       >
         <Plus class="h-4 w-4" /> Add performer
       </button>
+    </div>
+
+    <!-- Add form -->
+    <form v-if="addOpen" class="space-y-3 rounded-lg border border-border p-4" @submit.prevent="addPerformer">
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="flex-1 space-y-1">
+          <span class="text-xs font-medium text-muted-foreground">First name</span>
+          <input v-model="form.firstName" class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+        </label>
+        <label class="flex-1 space-y-1">
+          <span class="text-xs font-medium text-muted-foreground">Last name</span>
+          <input v-model="form.lastName" class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+        </label>
+        <label class="space-y-1">
+          <span class="text-xs font-medium text-muted-foreground">Date of birth</span>
+          <input v-model="form.dateOfBirth" type="date" class="block rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+        </label>
+        <label class="space-y-1">
+          <span class="text-xs font-medium text-muted-foreground">Gender</span>
+          <select v-model="form.gender" class="block w-20 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring">
+            <option value="">—</option>
+            <option v-for="o in genderOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid gap-2 sm:grid-cols-3">
+        <input v-model="form.guardianName" placeholder="Guardian name (optional)" class="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+        <input v-model="form.guardianEmail" type="email" placeholder="Guardian email" class="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+        <input v-model="form.guardianPhone" placeholder="Guardian phone" class="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+      </div>
+      <textarea v-model="form.notes" rows="2" placeholder="Notes — allergies, sizes, family info… (optional)" class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+      <div class="flex justify-end gap-2">
+        <button type="button" class="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent" @click="addOpen = false; resetForm()">Cancel</button>
+        <button type="submit" class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90">Add performer</button>
+      </div>
     </form>
 
     <input
@@ -201,115 +238,82 @@ async function removePerformer(performer: Performer) {
       {{ performers.length === 0 ? 'No performers yet — add your first above.' : 'No matches.' }}
     </p>
     <ul v-else class="divide-y divide-border rounded-lg border border-border">
-      <li
-        v-for="performer in filtered"
-        :key="performer.id"
-        class="px-4 py-2.5 text-sm"
-      >
-        <div class="flex items-center gap-3">
-        <span class="flex-1">
-          {{ performer.firstName }} {{ performer.lastName }}
-          <span v-if="genderLabel(performer.gender)" class="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-            {{ genderLabel(performer.gender) }}
-          </span>
-          <span v-if="ageOn(performer.dateOfBirth) !== null" class="ml-1.5 text-xs text-muted-foreground">
-            {{ ageOn(performer.dateOfBirth) }} yrs
-          </span>
-        </span>
-        <input
-          type="date"
-          class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
-          :value="performer.dateOfBirth ?? ''"
-          aria-label="Date of birth"
-          title="Date of birth"
-          @change="setDateOfBirth(performer, $event)"
-        />
-        <select
-          class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
-          :value="performer.gender ?? ''"
-          aria-label="Gender"
-          title="Gender"
-          @change="setGender(performer, $event)"
-        >
-          <option value="">—</option>
-          <option v-for="o in genderOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-        </select>
-        <button
-          class="rounded-md p-1.5"
-          :class="guardiansOf(performer.id).length > 0 ? 'text-primary hover:bg-accent' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
-          :aria-label="`Guardians for ${performer.firstName}`"
-          :title="`Parents / guardians for ${performer.firstName}`"
-          @click="guardiansOpenFor = guardiansOpenFor === performer.id ? null : performer.id"
-        >
-          <Contact class="h-4 w-4" />
-        </button>
-        <button
-          class="rounded-md p-1.5"
-          :class="performer.notes ? 'text-primary hover:bg-accent' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
-          :aria-label="`Notes for ${performer.firstName}`"
-          :title="`Notes for ${performer.firstName}`"
-          @click="notesOpenFor = notesOpenFor === performer.id ? null : performer.id"
-        >
-          <FileText class="h-4 w-4" />
-        </button>
-        <button
-          class="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
-          :aria-label="`Delete ${performer.firstName}`"
-          :title="`Delete ${performer.firstName}`"
-          @click="removePerformer(performer)"
-        >
-          <Trash2 class="h-4 w-4" />
-        </button>
-        </div>
-        <!-- Guardians editor -->
-        <div v-if="guardiansOpenFor === performer.id" class="mt-2 space-y-2 rounded-md border border-border bg-muted/30 p-3">
-          <p v-if="guardiansOf(performer.id).length === 0" class="text-xs text-muted-foreground">
-            No guardians yet — link an existing one (siblings share a record) or add a new one.
-          </p>
-          <ul v-else class="space-y-1">
-            <li v-for="g in guardiansOf(performer.id)" :key="g.id" class="flex items-center gap-2 text-xs">
-              <span class="font-medium">{{ g.name }}</span>
-              <a v-if="g.email" :href="`mailto:${g.email}`" class="text-primary hover:underline">{{ g.email }}</a>
-              <span v-if="g.phone" class="text-muted-foreground">{{ g.phone }}</span>
-              <button
-                class="ml-auto rounded p-0.5 text-muted-foreground hover:text-destructive"
-                :aria-label="`Unlink ${g.name}`"
-                @click="unlinkGuardian(performer.id, g.id)"
-              >
-                <X class="h-3.5 w-3.5" />
-              </button>
-            </li>
-          </ul>
-          <form v-if="linkableFor(performer.id).length > 0" class="flex gap-2" @submit.prevent="linkGuardian(performer.id)">
-            <select
-              v-model="linkGuardianId"
-              class="flex-1 rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
-            >
-              <option value="" disabled>Link existing guardian…</option>
-              <option v-for="g in linkableFor(performer.id)" :key="g.id" :value="g.id">
-                {{ g.name }}{{ g.email ? ` (${g.email})` : '' }}
-              </option>
-            </select>
-            <button type="submit" class="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent">Link</button>
-          </form>
-          <form class="flex flex-wrap gap-2" @submit.prevent="createGuardian(performer.id)">
-            <input v-model="newGuardianName" placeholder="New guardian name" class="w-0 min-w-28 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" />
-            <input v-model="newGuardianEmail" type="email" placeholder="Email" class="w-0 min-w-28 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" />
-            <input v-model="newGuardianPhone" placeholder="Phone" class="w-24 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" />
-            <button type="submit" class="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent" aria-label="Add guardian">
-              <Plus class="h-3.5 w-3.5" />
-            </button>
-          </form>
+      <li v-for="performer in filtered" :key="performer.id">
+        <div class="flex items-center gap-2 px-3 py-2.5 text-sm">
+          <button class="flex flex-1 items-center gap-2 text-left" @click="toggleRow(performer.id)">
+            <ChevronDown v-if="openRows.has(performer.id)" class="h-4 w-4 shrink-0 text-muted-foreground" />
+            <ChevronRight v-else class="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span class="font-medium">{{ performer.firstName }} {{ performer.lastName }}</span>
+            <span v-if="genderLabel(performer.gender)" class="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{{ genderLabel(performer.gender) }}</span>
+            <span v-if="ageOn(performer.dateOfBirth) !== null" class="text-xs text-muted-foreground">{{ ageOn(performer.dateOfBirth) }} yrs</span>
+            <span v-if="guardiansOf(performer.id).length > 0" class="text-xs text-muted-foreground">· {{ guardiansOf(performer.id).length }} guardian{{ guardiansOf(performer.id).length === 1 ? '' : 's' }}</span>
+          </button>
+          <button
+            class="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
+            :aria-label="`Delete ${performer.firstName}`"
+            :title="`Delete ${performer.firstName}`"
+            @click="removePerformer(performer)"
+          >
+            <Trash2 class="h-4 w-4" />
+          </button>
         </div>
 
-        <textarea
-          v-if="notesOpenFor === performer.id"
-          :value="performer.notes ?? ''"
-          rows="2"
-          placeholder="Constant notes — allergies, sizes, family info… (per-show notes live in the Planner)"
-          class="mt-2 block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          @change="saveNotes(performer, $event)"
-        />
+        <!-- Expanded detail -->
+        <div v-if="openRows.has(performer.id)" class="space-y-3 border-t border-border bg-muted/20 px-4 py-3">
+          <div class="flex flex-wrap items-end gap-3">
+            <label class="space-y-1">
+              <span class="text-xs font-medium text-muted-foreground">Date of birth</span>
+              <input type="date" class="block rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring" :value="performer.dateOfBirth ?? ''" @change="setDateOfBirth(performer, $event)" />
+            </label>
+            <label class="space-y-1">
+              <span class="text-xs font-medium text-muted-foreground">Gender</span>
+              <select class="block w-20 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring" :value="performer.gender ?? ''" @change="setGender(performer, $event)">
+                <option value="">—</option>
+                <option v-for="o in genderOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Guardians -->
+          <div>
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Guardians</h3>
+            <ul v-if="guardiansOf(performer.id).length > 0" class="mt-1.5 space-y-1">
+              <li v-for="g in guardiansOf(performer.id)" :key="g.id" class="flex items-center gap-2 text-xs">
+                <span class="font-medium">{{ g.name }}</span>
+                <a v-if="g.email" :href="`mailto:${g.email}`" class="text-primary hover:underline">{{ g.email }}</a>
+                <span v-if="g.phone" class="text-muted-foreground">{{ g.phone }}</span>
+                <button class="ml-auto rounded p-0.5 text-muted-foreground hover:text-destructive" :aria-label="`Unlink ${g.name}`" @click="unlinkGuardian(performer.id, g.id)">
+                  <X class="h-3.5 w-3.5" />
+                </button>
+              </li>
+            </ul>
+            <form v-if="linkableFor(performer.id).length > 0" class="mt-2 flex gap-2" @submit.prevent="linkGuardian(performer.id)">
+              <select v-model="linkGuardianId[performer.id]" class="flex-1 rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none">
+                <option value="">Link existing guardian (siblings share)…</option>
+                <option v-for="g in linkableFor(performer.id)" :key="g.id" :value="g.id">{{ g.name }}{{ g.email ? ` (${g.email})` : '' }}</option>
+              </select>
+              <button type="submit" class="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent">Link</button>
+            </form>
+            <form class="mt-2 flex flex-wrap gap-2" @submit.prevent="createGuardian(performer.id)">
+              <input v-model="gFor(performer.id).name" placeholder="New guardian name" class="w-0 min-w-28 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" />
+              <input v-model="gFor(performer.id).email" type="email" placeholder="Email" class="w-0 min-w-28 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" />
+              <input v-model="gFor(performer.id).phone" placeholder="Phone" class="w-24 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" />
+              <button type="submit" class="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent" aria-label="Add guardian" title="Add guardian"><Plus class="h-3.5 w-3.5" /></button>
+            </form>
+          </div>
+
+          <!-- Notes -->
+          <label class="block space-y-1">
+            <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes <span class="font-normal normal-case">(all shows)</span></span>
+            <textarea
+              :value="performer.notes ?? ''"
+              rows="2"
+              placeholder="Constant notes — allergies, sizes, family info… (per-show notes live in the Planner)"
+              class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              @change="saveNotes(performer, $event)"
+            />
+          </label>
+        </div>
       </li>
     </ul>
   </div>

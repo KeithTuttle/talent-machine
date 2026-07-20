@@ -103,7 +103,7 @@ public class NumbersController : ControllerBase
         var data = new ShowOrderData
         {
             ProductionTitle = production.Title,
-            ShowDate = production.ShowDate,
+            OpeningDate = production.OpeningDate,
             Acts = await _db.Acts.Where(a => a.ProductionId == productionId).ToListAsync(),
             Numbers = numbers,
             NumberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync(),

@@ -66,6 +66,8 @@ public class ExportController : ControllerBase
             rehearsalAttendees = await _db.RehearsalAttendees.AsNoTracking().ToListAsync(),
             rehearsalAttendances = await _db.RehearsalAttendances.AsNoTracking().ToListAsync(),
             acts = await _db.Acts.AsNoTracking().ToListAsync(),
+            staffMembers = await _db.StaffMembers.AsNoTracking().ToListAsync(),
+            productionStaff = await _db.ProductionStaff.AsNoTracking().ToListAsync(),
         };
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(export, JsonOpts);

@@ -209,7 +209,7 @@ function onImported(imported: Conflict[]) {
 const kidConflicts = (performerId: number) =>
   filteredConflicts.value.filter((c) => c.performerId === performerId)
 
-const showDate = computed(() => scope.selectedProduction?.showDate)
+const openingDate = computed(() => scope.selectedProduction?.openingDate)
 </script>
 
 <template>
@@ -299,7 +299,7 @@ const showDate = computed(() => scope.selectedProduction?.showDate)
                   class="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs"
                   :class="[
                     isToday(cell.date) ? 'bg-primary font-semibold text-primary-foreground' : '',
-                    showDate === toIsoDate(cell.date) ? 'font-bold text-primary underline' : '',
+                    openingDate === toIsoDate(cell.date) ? 'font-bold text-primary underline' : '',
                   ]"
                 >
                   {{ cell.date.getDate() }}
@@ -349,8 +349,8 @@ const showDate = computed(() => scope.selectedProduction?.showDate)
             <ColorDot :color="groupColor(m.performerId)" size="sm" />
             <span class="flex-1 text-sm font-medium">
               {{ performerName(m.performerId) }}
-              <span v-if="ageOn(m.performer?.dateOfBirth, showDate) !== null" class="ml-1 text-xs font-normal text-muted-foreground">
-                {{ ageOn(m.performer?.dateOfBirth, showDate) }}
+              <span v-if="ageOn(m.performer?.dateOfBirth, openingDate) !== null" class="ml-1 text-xs font-normal text-muted-foreground">
+                {{ ageOn(m.performer?.dateOfBirth, openingDate) }}
               </span>
             </span>
             <span class="text-xs text-muted-foreground">

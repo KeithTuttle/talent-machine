@@ -34,3 +34,26 @@ public enum RehearsalType
     Runthrough,
     Other,
 }
+
+public enum StaffRole
+{
+    Director,
+    Choreographer,
+    MusicDirector,
+    Producer,
+}
+
+/// <summary>How far along a number is in being taught. Null = not taught yet.</summary>
+public enum TeachStatus
+{
+    Taught,
+    NeedsReview,
+    Complete,
+}
+
+public enum CostumeGender
+{
+    All,
+    Boys,
+    Girls,
+}
