@@ -40,6 +40,9 @@ public class AppDbContext : DbContext
     public DbSet<Act> Acts => Set<Act>();
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<ProductionStaff> ProductionStaff => Set<ProductionStaff>();
+    public DbSet<CostumePiece> CostumePieces => Set<CostumePiece>();
+    public DbSet<CostumeAssignment> CostumeAssignments => Set<CostumeAssignment>();
+    public DbSet<Formation> Formations => Set<Formation>();
 
     /// <summary>Tenant used by the query filter; 0 (matches nothing) when unresolved.</summary>
     private int CurrentTenantId => _tenant.TenantId ?? 0;
@@ -65,6 +68,7 @@ public class AppDbContext : DbContext
         b.Entity<RehearsalAttendance>().Property(x => x.Status).HasConversion<string>();
         b.Entity<ProductionStaff>().Property(x => x.Role).HasConversion<string>();
         b.Entity<MusicalNumber>().Property(x => x.TeachStatus).HasConversion<string>();
+        b.Entity<CostumePiece>().Property(x => x.Gender).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
         b.Entity<NumberCast>().HasKey(x => new { x.MusicalNumberId, x.PerformerId });
@@ -149,6 +153,24 @@ public class AppDbContext : DbContext
         b.Entity<ProductionStaff>()
             .HasOne(x => x.StaffMember).WithMany().HasForeignKey(x => x.StaffMemberId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Costumes die with their number; assignments also with the performer.
+        b.Entity<CostumePiece>()
+            .HasOne(x => x.MusicalNumber).WithMany().HasForeignKey(x => x.MusicalNumberId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<CostumeAssignment>()
+            .HasOne(x => x.MusicalNumber).WithMany().HasForeignKey(x => x.MusicalNumberId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<CostumeAssignment>()
+            .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<CostumeAssignment>().HasIndex(x => new { x.MusicalNumberId, x.PerformerId }).IsUnique();
+
+        // Formations die with their number; coordinates stored as jsonb.
+        b.Entity<Formation>()
+            .HasOne(x => x.MusicalNumber).WithMany().HasForeignKey(x => x.MusicalNumberId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Formation>().Property(x => x.Coordinates).HasColumnType("jsonb");
 
         // Helpful lookup indexes.
         b.Entity<Conflict>().HasIndex(x => new { x.ProductionId, x.PerformerId });

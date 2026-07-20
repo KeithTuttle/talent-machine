@@ -12,6 +12,25 @@ export const GROUP_COLORS = [
   { name: 'Brown', hex: '#926B4B' },
 ]
 
+/** Stable palette for costume labels (dance-manager's COSTUME_PALETTE). */
+export const COSTUME_PALETTE = [
+  '#2563eb', '#db2777', '#16a34a', '#f59e0b', '#8b5cf6',
+  '#0d9488', '#dc2626', '#0ea5e9', '#ca8a04', '#7c3aed',
+]
+
+/** Assigns each distinct (lowercased) costume label a stable palette color. */
+export function costumeColorMap(labels: (string | null | undefined)[]): Map<string, string> {
+  const map = new Map<string, string>()
+  let i = 0
+  for (const raw of labels) {
+    const key = raw?.trim().toLowerCase()
+    if (!key || map.has(key)) continue
+    map.set(key, COSTUME_PALETTE[i % COSTUME_PALETTE.length])
+    i++
+  }
+  return map
+}
+
 /** Dot colors by performer gender (dance-manager's overview convention). */
 export const GENDER_COLORS: Record<string, string> = {
   Male: '#2563EB',

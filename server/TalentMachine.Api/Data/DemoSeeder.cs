@@ -221,6 +221,32 @@ public class DemoSeeder : IHostedService
         Cast(finale, kids.ToArray());
         await db.SaveChangesAsync();
 
+        // --- Costumes: pieces + a few sizes, incl. an on-stage extra ---------
+        db.CostumePieces.AddRange(
+            new CostumePiece { MusicalNumberId = hardKnock.Id, Gender = CostumeGender.All, Description = "Gray orphan smock", Accessories = "Rope belt", Shoes = "Scuffed black flats" },
+            new CostumePiece { MusicalNumberId = tomorrow.Id, Gender = CostumeGender.Girls, Description = "Red Annie dress", Accessories = "White collar", Shoes = "Black Mary Janes", VendorUrl = "https://example.com/annie-dress" },
+            new CostumePiece { MusicalNumberId = nyc.Id, Gender = CostumeGender.Girls, Description = "1930s formal gown" },
+            new CostumePiece { MusicalNumberId = nyc.Id, Gender = CostumeGender.Boys, Description = "Pinstripe suit", Shoes = "Dress oxfords" });
+        db.CostumeAssignments.AddRange(
+            new CostumeAssignment { MusicalNumberId = tomorrow.Id, PerformerId = kids[0].Id, Size = "CH 10", Notes = "Hem taken up 1\"" },
+            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[4].Id, Size = "CH 8" },
+            // Liam is on stage during Hard-Knock Life but not cast in it (extra).
+            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[1].Id, Size = "CH 10", Notes = "Standing on the platform" });
+        await db.SaveChangesAsync();
+
+        // --- A saved formation for Hard-Knock Life (history to look back on) --
+        var coords = System.Text.Json.JsonSerializer.Serialize(
+            orphans.Select((k, i) => new { k.Id, x = 20.0 + i * 12, y = 40.0 + (i % 2) * 20 })
+                   .ToDictionary(e => e.Id.ToString(), e => new { e.x, e.y }));
+        db.Formations.Add(new Formation
+        {
+            MusicalNumberId = hardKnock.Id,
+            FormationName = "Opening — scrubbing lines",
+            OrderIndex = 0,
+            Coordinates = coords,
+        });
+        await db.SaveChangesAsync();
+
         // --- Conflicts -------------------------------------------------------
         db.Conflicts.AddRange(
             new Conflict

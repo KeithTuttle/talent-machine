@@ -115,6 +115,36 @@ export interface NumberCast {
   performerId: number
 }
 
+export interface Formation {
+  id: number
+  musicalNumberId: number
+  formationName: string
+  orderIndex: number
+  /** JSON string: { [performerId]: { x, y } } in 0–100 percentages. */
+  coordinates: string
+}
+
+export type CostumeGender = 'All' | 'Boys' | 'Girls'
+
+export interface CostumePiece {
+  id: number
+  musicalNumberId: number
+  gender: CostumeGender
+  description?: string | null
+  accessories?: string | null
+  shoes?: string | null
+  photoUrl?: string | null
+  vendorUrl?: string | null
+}
+
+export interface CostumeAssignment {
+  id: number
+  musicalNumberId: number
+  performerId: number
+  size?: string | null
+  notes?: string | null
+}
+
 export interface Guardian {
   id: number
   name: string

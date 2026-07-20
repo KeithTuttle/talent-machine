@@ -7,6 +7,7 @@ import {
   FileText,
   Music,
   Plus,
+  Shirt,
   Trash2,
   Users,
 } from 'lucide-vue-next'
@@ -19,6 +20,7 @@ import ColorDot from '@/components/ColorDot.vue'
 import ColorPicker from '@/components/ColorPicker.vue'
 import CastMemberDrawer from '@/components/CastMemberDrawer.vue'
 import CastOverviewGrid from '@/components/CastOverviewGrid.vue'
+import NumberDrawer from '@/components/NumberDrawer.vue'
 import StaffPicker from '@/components/StaffPicker.vue'
 import { teachIcon, TEACH_STATUSES, TEACH_LABELS } from '@/lib/teach'
 import { useScopeStore } from '@/stores/scope'
@@ -54,8 +56,29 @@ const view = ref<'plan' | 'overview'>(
 watch(view, (v) => localStorage.setItem('planner.view', v))
 /** Cast member open in the per-kid drawer (notes + conflicts). */
 const drawerMember = ref<CastMembership | null>(null)
+/** Number open in the per-number drawer (costumes + formations). */
+const drawerNumber = ref<MusicalNumber | null>(null)
 
 const hasNotes = (m: CastMembership) => !!(m.notes || m.performer?.notes)
+
+/** Distinct costume labels in use (for reuse chips in the number drawer). */
+const costumeLabels = computed(() =>
+  [...new Set(numbers.value.map((n) => n.costumeLabel?.trim()).filter((l): l is string => !!l))].sort(),
+)
+
+async function downloadCostumePdf() {
+  try {
+    const { data } = await api.get(`/costumes/pdf?productionId=${scope.selectedProductionId}`, { responseType: 'blob' })
+    const url = URL.createObjectURL(data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'costumes.pdf'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    toast.error("Couldn't generate the costume PDF — is the server running?")
+  }
+}
 
 // --- Loading -----------------------------------------------------------------
 
@@ -429,6 +452,8 @@ async function deleteRole(role: Role) {
           :performer-age="performerAge"
           @toggle="toggleCastFor"
           @open-member="drawerMember = $event"
+          @open-number="drawerNumber = $event"
+          @costume-pdf="downloadCostumePdf"
         />
       </div>
 
@@ -709,6 +734,12 @@ async function deleteRole(role: Role) {
               <Trash2 class="h-4 w-4" />
             </button>
           </div>
+          <button
+            class="mt-3 flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent"
+            @click="drawerNumber = selectedNumber"
+          >
+            <Shirt class="h-4 w-4" /> Costumes &amp; formations
+          </button>
         </div>
 
         <!-- Casting checklist -->
@@ -775,8 +806,18 @@ async function deleteRole(role: Role) {
     <CastMemberDrawer
       :member="drawerMember"
       :cast-group="drawerMember ? castGroupOf(drawerMember) : null"
-      :show-date="scope.selectedProduction?.openingDate"
+      :opening-date="scope.selectedProduction?.openingDate"
       @close="drawerMember = null"
+    />
+    <NumberDrawer
+      :number="drawerNumber"
+      :cast="cast"
+      :groups="groups"
+      :performers="performers"
+      :number-casts="numberCasts"
+      :costume-labels="costumeLabels"
+      @close="drawerNumber = null"
+      @toggle-cast="toggleCastFor"
     />
   </div>
 </template>
