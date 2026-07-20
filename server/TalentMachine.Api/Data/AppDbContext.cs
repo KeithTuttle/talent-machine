@@ -64,6 +64,7 @@ public class AppDbContext : DbContext
         b.Entity<Rehearsal>().Property(x => x.Type).HasConversion<string>();
         b.Entity<RehearsalAttendance>().Property(x => x.Status).HasConversion<string>();
         b.Entity<ProductionStaff>().Property(x => x.Role).HasConversion<string>();
+        b.Entity<MusicalNumber>().Property(x => x.TeachStatus).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
         b.Entity<NumberCast>().HasKey(x => new { x.MusicalNumberId, x.PerformerId });
@@ -135,6 +136,10 @@ public class AppDbContext : DbContext
         // Deleting an act drops its numbers to "Unassigned", never deletes them.
         b.Entity<MusicalNumber>()
             .HasOne(x => x.Act).WithMany().HasForeignKey(x => x.ActId)
+            .OnDelete(DeleteBehavior.SetNull);
+        // Deleting a staff member clears the choreographer, keeps the number.
+        b.Entity<MusicalNumber>()
+            .HasOne(x => x.Choreographer).WithMany().HasForeignKey(x => x.ChoreographerStaffId)
             .OnDelete(DeleteBehavior.SetNull);
 
         // Creative-team assignments die with the show or the staff member.

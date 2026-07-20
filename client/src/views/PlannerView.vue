@@ -19,7 +19,11 @@ import ColorDot from '@/components/ColorDot.vue'
 import ColorPicker from '@/components/ColorPicker.vue'
 import CastMemberDrawer from '@/components/CastMemberDrawer.vue'
 import CastOverviewGrid from '@/components/CastOverviewGrid.vue'
+import StaffPicker from '@/components/StaffPicker.vue'
+import { teachIcon, TEACH_STATUSES, TEACH_LABELS } from '@/lib/teach'
 import { useScopeStore } from '@/stores/scope'
+import { useStaffStore } from '@/stores/staff'
+import type { TeachStatus } from '@/types'
 import type {
   Act,
   CastGroup,
@@ -31,6 +35,7 @@ import type {
 } from '@/types'
 
 const scope = useScopeStore()
+const staff = useStaffStore()
 
 const numbers = ref<MusicalNumber[]>([])
 const acts = ref<Act[]>([])
@@ -94,7 +99,10 @@ async function loadAll() {
     selectedNumberId.value = numbers.value[0]?.id ?? null
 }
 
-onMounted(loadAll)
+onMounted(() => {
+  loadAll()
+  staff.fetch()
+})
 watch(() => scope.selectedProductionId, loadAll)
 
 // --- Derived -----------------------------------------------------------------
@@ -176,6 +184,19 @@ async function addNumber() {
 async function saveNumber(number: MusicalNumber) {
   await api.put(`/numbers/${number.id}`, number)
   toast.success('Saved')
+}
+
+async function setChoreographer(staffId: number | null) {
+  if (!selectedNumber.value) return
+  selectedNumber.value.choreographerStaffId = staffId
+  await api.put(`/numbers/${selectedNumber.value.id}`, selectedNumber.value).catch(() => {})
+}
+
+async function setTeachStatus(e: Event) {
+  if (!selectedNumber.value) return
+  const raw = (e.target as HTMLSelectElement).value
+  selectedNumber.value.teachStatus = (raw || null) as TeachStatus | null
+  await api.put(`/numbers/${selectedNumber.value.id}`, selectedNumber.value).catch(() => {})
 }
 
 async function deleteNumber(number: MusicalNumber) {
@@ -445,6 +466,13 @@ async function deleteRole(role: Role) {
             >
               <span class="w-5 shrink-0 text-xs text-muted-foreground">{{ i + 1 }}.</span>
               <span class="flex-1 truncate font-medium">{{ number.title }}</span>
+              <component
+                :is="teachIcon(number.teachStatus)!.icon"
+                v-if="teachIcon(number.teachStatus)"
+                class="h-3.5 w-3.5 shrink-0"
+                :class="teachIcon(number.teachStatus)!.class"
+                :aria-label="teachIcon(number.teachStatus)!.label"
+              />
               <span class="flex items-center gap-1 text-xs text-muted-foreground">
                 <Users class="h-3.5 w-3.5" /> {{ castCountOf(number.id) }}
               </span>
@@ -634,14 +662,35 @@ async function deleteRole(role: Role) {
                   @change="saveNumber(selectedNumber)"
                 />
               </label>
-              <label class="block space-y-1">
-                <span class="text-xs font-medium text-muted-foreground">Songwriter / composer</span>
-                <input
-                  v-model="selectedNumber.songwriter"
-                  class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  @change="saveNumber(selectedNumber)"
-                />
-              </label>
+              <div class="flex flex-wrap gap-3">
+                <label class="flex-1 space-y-1">
+                  <span class="text-xs font-medium text-muted-foreground">Choreographer</span>
+                  <div v-if="selectedNumber.choreographerStaffId" class="flex items-center gap-1.5">
+                    <span class="flex-1 truncate rounded-md border border-border bg-background px-2.5 py-1.5 text-sm">
+                      {{ staff.byId(selectedNumber.choreographerStaffId)?.name ?? 'Unknown' }}
+                    </span>
+                    <button
+                      class="rounded p-1 text-muted-foreground hover:text-destructive"
+                      title="Clear choreographer"
+                      @click="setChoreographer(null)"
+                    >
+                      <Trash2 class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <StaffPicker v-else placeholder="Assign choreographer…" @select="setChoreographer($event.id)" />
+                </label>
+                <label class="space-y-1">
+                  <span class="text-xs font-medium text-muted-foreground">Teaching</span>
+                  <select
+                    class="block rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    :value="selectedNumber.teachStatus ?? ''"
+                    @change="setTeachStatus($event)"
+                  >
+                    <option value="">Not taught</option>
+                    <option v-for="s in TEACH_STATUSES" :key="s" :value="s">{{ TEACH_LABELS[s] }}</option>
+                  </select>
+                </label>
+              </div>
               <label class="block space-y-1">
                 <span class="text-xs font-medium text-muted-foreground">Notes</span>
                 <textarea

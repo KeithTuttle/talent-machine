@@ -92,12 +92,19 @@ export interface Act {
   orderIndex: number
 }
 
+export type TeachStatus = 'Taught' | 'NeedsReview' | 'Complete'
+
 export interface MusicalNumber {
   id: number
   productionId: number
   title: string
-  songwriter?: string | null
   notes?: string | null
+  /** Staff member choreographing this number; null = unassigned. */
+  choreographerStaffId?: number | null
+  /** Null = not taught yet. */
+  teachStatus?: TeachStatus | null
+  /** Free-text costume label (color-coded in the grid, drives quick-change). */
+  costumeLabel?: string | null
   /** Null = not yet placed in the running order. */
   actId?: number | null
   orderIndex: number

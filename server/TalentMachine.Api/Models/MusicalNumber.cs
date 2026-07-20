@@ -10,11 +10,17 @@ public class MusicalNumber : ITenantScoped
     public int Id { get; set; }
     public int ProductionId { get; set; }
     public string Title { get; set; } = string.Empty;
-    public string? Songwriter { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Who choreographs this number (from the staff directory); null = unassigned.</summary>
+    public int? ChoreographerStaffId { get; set; }
+    /// <summary>How far along teaching is; null = not taught yet.</summary>
+    public TeachStatus? TeachStatus { get; set; }
+    /// <summary>Free-text costume label; same non-empty label on adjacent numbers = no quick change.</summary>
+    public string? CostumeLabel { get; set; }
     /// <summary>Which act this number belongs to; null = not yet in the running order.</summary>
     public int? ActId { get; set; }
     public int OrderIndex { get; set; }
 
     public Act? Act { get; set; }
+    public StaffMember? Choreographer { get; set; }
 }

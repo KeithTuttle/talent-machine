@@ -108,6 +108,7 @@ public class NumbersController : ControllerBase
             Numbers = numbers,
             NumberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync(),
             Performers = await _db.Performers.ToListAsync(),
+            StaffNames = await _db.StaffMembers.ToDictionaryAsync(s => s.Id, s => s.Name),
         };
 
         var safeTitle = string.Join("-", production.Title.Split(Path.GetInvalidFileNameChars(),

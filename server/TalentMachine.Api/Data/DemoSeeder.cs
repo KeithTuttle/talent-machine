@@ -183,22 +183,26 @@ public class DemoSeeder : IHostedService
         db.Acts.AddRange(act1, act2);
         await db.SaveChangesAsync();
 
-        MusicalNumber N(string title, int order, Act? act, string songwriter = "Strouse / Charnin") => new()
+        MusicalNumber N(string title, int order, Act? act,
+            TeachStatus? teach = null, string? costume = null) => new()
         {
             ProductionId = annie.Id,
             Title = title,
-            Songwriter = songwriter,
             ActId = act?.Id,
             OrderIndex = order,
+            // Marcus Lee choreographs the show.
+            ChoreographerStaffId = staff[1].Id,
+            TeachStatus = teach,
+            CostumeLabel = costume,
         };
-        var maybe = N("Maybe", 1, act1);
-        var hardKnock = N("It's the Hard-Knock Life", 2, act1);
-        var tomorrow = N("Tomorrow", 3, act1);
-        var littleGirls = N("Little Girls", 4, act1);
-        var nyc = N("N.Y.C.", 1, act2);
-        var easyStreet = N("Easy Street", 2, act2);
-        var reprise = N("Tomorrow (Reprise)", 3, act2);
-        var finale = N("Finale: A New Deal for Christmas", 4, act2);
+        var maybe = N("Maybe", 1, act1, TeachStatus.Complete, "Orphan rags");
+        var hardKnock = N("It's the Hard-Knock Life", 2, act1, TeachStatus.Complete, "Orphan rags");
+        var tomorrow = N("Tomorrow", 3, act1, TeachStatus.Taught, "Annie dress");
+        var littleGirls = N("Little Girls", 4, act1, TeachStatus.NeedsReview, "Hannigan robe");
+        var nyc = N("N.Y.C.", 1, act2, TeachStatus.Taught, "Formal wear");
+        var easyStreet = N("Easy Street", 2, act2, null, "Rooster suit");
+        var reprise = N("Tomorrow (Reprise)", 3, act2, null, "Annie dress");
+        var finale = N("Finale: A New Deal for Christmas", 4, act2, null, "Formal wear");
         var uncast = N("I Don't Need Anything But You", 1, null);
         db.Numbers.AddRange(maybe, hardKnock, tomorrow, littleGirls, nyc, easyStreet, reprise, finale, uncast);
         await db.SaveChangesAsync();
@@ -293,7 +297,7 @@ public class DemoSeeder : IHostedService
         await db.SaveChangesAsync();
         foreach (var k in new[] { kids[0], kids[2], kids[5], kids[8], kids[13] })
             db.CastMemberships.Add(new CastMembership { ProductionId = seussical.Id, PerformerId = k.Id, CastGroupId = sGroup.Id });
-        var horton = new MusicalNumber { ProductionId = seussical.Id, Title = "Horton Hears a Who", Songwriter = "Flaherty / Ahrens", OrderIndex = 1 };
+        var horton = new MusicalNumber { ProductionId = seussical.Id, Title = "Horton Hears a Who", OrderIndex = 1 };
         db.Numbers.Add(horton);
         await db.SaveChangesAsync();
         db.NumberCasts.AddRange(

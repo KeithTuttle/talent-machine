@@ -14,6 +14,7 @@ public class ShowOrderData
     public List<MusicalNumber> Numbers { get; set; } = new();
     public List<NumberCast> NumberCasts { get; set; } = new();
     public List<Performer> Performers { get; set; } = new();
+    public Dictionary<int, string> StaffNames { get; set; } = new();
 }
 
 /// <summary>
@@ -24,8 +25,11 @@ public class ShowOrderData
 /// </summary>
 public class ShowOrderPdfService
 {
+    private Dictionary<int, string> _staffNames = new();
+
     public byte[] Build(ShowOrderData data)
     {
+        _staffNames = data.StaffNames;
         var castByNumber = data.NumberCasts.ToLookup(c => c.MusicalNumberId, c => c.PerformerId);
         var performerName = data.Performers.ToDictionary(
             p => p.Id, p => $"{p.FirstName} {p.LastName}".Trim());
@@ -129,8 +133,8 @@ public class ShowOrderPdfService
                     {
                         info.Item().Text(string.IsNullOrWhiteSpace(entry.Title) ? "Untitled number" : entry.Title)
                             .SemiBold().FontColor(Colors.Black);
-                        if (!string.IsNullOrWhiteSpace(entry.Songwriter))
-                            info.Item().Text(entry.Songwriter!).FontSize(9).FontColor(Colors.Grey.Medium);
+                        if (entry.ChoreographerStaffId is int cid && _staffNames.TryGetValue(cid, out var choreo))
+                            info.Item().Text($"Choreographer: {choreo}").FontSize(9).FontColor(Colors.Grey.Medium);
 
                         var cast = castByNumber[entry.Id].ToList();
                         if (cast.Count > 0)
