@@ -165,7 +165,7 @@ function reset() {
         <input
           type="file"
           accept=".csv,.txt,text/csv"
-          class="mt-4 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent"
+          class="mt-4 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-accent"
           @change="onFile"
         />
 

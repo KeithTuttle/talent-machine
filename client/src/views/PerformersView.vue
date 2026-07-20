@@ -221,12 +221,14 @@ async function removePerformer(performer: Performer) {
           class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
           :value="performer.dateOfBirth ?? ''"
           aria-label="Date of birth"
+          title="Date of birth"
           @change="setDateOfBirth(performer, $event)"
         />
         <select
           class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
           :value="performer.gender ?? ''"
           aria-label="Gender"
+          title="Gender"
           @change="setGender(performer, $event)"
         >
           <option value="">—</option>
@@ -236,6 +238,7 @@ async function removePerformer(performer: Performer) {
           class="rounded-md p-1.5"
           :class="guardiansOf(performer.id).length > 0 ? 'text-primary hover:bg-accent' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
           :aria-label="`Guardians for ${performer.firstName}`"
+          :title="`Parents / guardians for ${performer.firstName}`"
           @click="guardiansOpenFor = guardiansOpenFor === performer.id ? null : performer.id"
         >
           <Contact class="h-4 w-4" />
@@ -244,6 +247,7 @@ async function removePerformer(performer: Performer) {
           class="rounded-md p-1.5"
           :class="performer.notes ? 'text-primary hover:bg-accent' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
           :aria-label="`Notes for ${performer.firstName}`"
+          :title="`Notes for ${performer.firstName}`"
           @click="notesOpenFor = notesOpenFor === performer.id ? null : performer.id"
         >
           <FileText class="h-4 w-4" />
@@ -251,6 +255,7 @@ async function removePerformer(performer: Performer) {
         <button
           class="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
           :aria-label="`Delete ${performer.firstName}`"
+          :title="`Delete ${performer.firstName}`"
           @click="removePerformer(performer)"
         >
           <Trash2 class="h-4 w-4" />

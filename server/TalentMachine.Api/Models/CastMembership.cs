@@ -14,12 +14,9 @@ public class CastMembership : ITenantScoped
     public int PerformerId { get; set; }
     /// <summary>Null = in the show but not yet placed in a group.</summary>
     public int? CastGroupId { get; set; }
-    /// <summary>Age/ability group for this show; null = not yet leveled.</summary>
-    public int? LevelGroupId { get; set; }
     /// <summary>Per-show notes about this performer (constant notes live on Performer).</summary>
     public string? Notes { get; set; }
 
     public Performer? Performer { get; set; }
     public CastGroup? CastGroup { get; set; }
-    public LevelGroup? LevelGroup { get; set; }
 }

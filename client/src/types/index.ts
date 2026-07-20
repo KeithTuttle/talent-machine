@@ -42,25 +42,11 @@ export interface CastGroup {
   orderIndex: number
 }
 
-export interface LevelGroup {
-  id: number
-  productionId: number
-  name: string
-  /** Free-text ability label, e.g. "Advanced". */
-  level?: string | null
-  minAge?: number | null
-  maxAge?: number | null
-  color?: string | null
-  notes?: string | null
-  orderIndex: number
-}
-
 export interface CastMembership {
   id: number
   productionId: number
   performerId: number
   castGroupId?: number | null
-  levelGroupId?: number | null
   /** Per-show notes (constant notes live on Performer.notes). */
   notes?: string | null
   performer?: Performer | null

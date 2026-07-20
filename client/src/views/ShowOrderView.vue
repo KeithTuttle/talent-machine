@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ArrowDown, ArrowUp, FileDown, ListOrdered, Plus, Trash2, Users } from 'lucide-vue-next'
+import { ArrowDown, ArrowUp, FileDown, GripVertical, ListOrdered, Plus, Trash2, Users } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
@@ -133,6 +133,75 @@ async function setAct(number: MusicalNumber, e: Event) {
   await api.put(`/numbers/${number.id}`, number).catch(() => {})
 }
 
+// --- Drag & drop -------------------------------------------------------------
+
+const draggingId = ref<number | null>(null)
+/** Insertion marker: act (null = Unassigned) + index within it. */
+const dropTarget = ref<{ actId: number | null; index: number } | null>(null)
+
+function onDragStart(number: MusicalNumber, e: DragEvent) {
+  draggingId.value = number.id
+  e.dataTransfer?.setData('text/plain', String(number.id))
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+
+function onDragOverRow(actId: number | null, index: number, e: DragEvent) {
+  if (draggingId.value === null) return
+  e.preventDefault()
+  // Drop above or below the hovered row depending on cursor half.
+  const el = e.currentTarget as HTMLElement
+  const below = e.clientY > el.getBoundingClientRect().top + el.offsetHeight / 2
+  dropTarget.value = { actId, index: index + (below ? 1 : 0) }
+}
+
+function onDragOverSection(actId: number | null, e: DragEvent) {
+  if (draggingId.value === null) return
+  e.preventDefault()
+  // Hovering the section (not a row) → drop at the end.
+  dropTarget.value ??= { actId, index: orderedNumbers(actId).length }
+  if (dropTarget.value.actId !== actId)
+    dropTarget.value = { actId, index: orderedNumbers(actId).length }
+}
+
+async function onDrop() {
+  const target = dropTarget.value
+  const dragged = numbers.value.find((n) => n.id === draggingId.value)
+  draggingId.value = null
+  dropTarget.value = null
+  if (!target || !dragged) return
+
+  const fromActId = dragged.actId ?? null
+  const list = orderedNumbers(target.actId).filter((n) => n.id !== dragged.id)
+  let index = target.index
+  // Removing the dragged row from its own act shifts later indexes down one.
+  if (fromActId === target.actId) {
+    const oldIndex = orderedNumbers(fromActId).findIndex((n) => n.id === dragged.id)
+    if (oldIndex !== -1 && oldIndex < index) index--
+  }
+  index = Math.max(0, Math.min(index, list.length))
+  list.splice(index, 0, dragged)
+  list.forEach((n, i) => (n.orderIndex = i + 1))
+
+  if (fromActId !== target.actId) {
+    dragged.actId = target.actId
+    await api.put(`/numbers/${dragged.id}`, dragged).catch(() => {})
+  }
+  await api
+    .put('/numbers/reorder', {
+      productionId: scope.selectedProductionId,
+      orderedIds: list.map((n) => n.id),
+    })
+    .catch(() => {})
+}
+
+function onDragEnd() {
+  draggingId.value = null
+  dropTarget.value = null
+}
+
+const isDropAt = (actId: number | null, index: number) =>
+  dropTarget.value?.actId === actId && dropTarget.value.index === index
+
 // --- PDF ---------------------------------------------------------------------
 
 async function downloadPdf() {
@@ -231,15 +300,38 @@ async function downloadPdf() {
           <span v-else class="font-display text-base font-semibold text-muted-foreground">Unassigned</span>
         </div>
 
-        <p v-if="section.entries.length === 0" class="px-4 py-3 text-xs italic text-muted-foreground">
-          No numbers yet — move some here with each number's act selector.
+        <p
+          v-if="section.entries.length === 0"
+          class="px-4 py-3 text-xs italic text-muted-foreground"
+          :class="isDropAt(section.act?.id ?? null, 0) ? 'bg-accent/50' : ''"
+          @dragover="onDragOverSection(section.act?.id ?? null, $event)"
+          @drop.prevent="onDrop"
+        >
+          No numbers yet — drag some here, or use each number's act selector.
         </p>
-        <ul v-else class="divide-y divide-border">
+        <ul
+          v-else
+          class="divide-y divide-border"
+          @dragover="onDragOverSection(section.act?.id ?? null, $event)"
+          @drop.prevent="onDrop"
+        >
           <li
             v-for="(number, i) in section.entries"
             :key="number.id"
-            class="flex items-center gap-2 px-4 py-2 text-sm"
+            class="flex cursor-grab items-center gap-2 px-4 py-2 text-sm active:cursor-grabbing"
+            :class="[
+              draggingId === number.id ? 'opacity-40' : '',
+              isDropAt(section.act?.id ?? null, i) ? 'border-t-2 !border-t-primary' : '',
+              isDropAt(section.act?.id ?? null, i + 1) && i === section.entries.length - 1 ? 'border-b-2 !border-b-primary' : '',
+            ]"
+            draggable="true"
+            title="Drag to reorder or move between acts"
+            @dragstart="onDragStart(number, $event)"
+            @dragover.stop="onDragOverRow(section.act?.id ?? null, i, $event)"
+            @drop.prevent="onDrop"
+            @dragend="onDragEnd"
           >
+            <GripVertical class="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden="true" />
             <span class="w-7 shrink-0 text-xs tabular-nums text-muted-foreground">
               {{ section.act ? section.startNumber + i + 1 + '.' : '—' }}
             </span>

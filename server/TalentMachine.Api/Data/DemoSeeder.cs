@@ -137,18 +137,7 @@ public class DemoSeeder : IHostedService
         var gold = new CastGroup { ProductionId = annie.Id, Name = "Gold Group", Color = "#EAB308", OrderIndex = 1 };
         var blue = new CastGroup { ProductionId = annie.Id, Name = "Blue Group", Color = "#3B82F6", OrderIndex = 2 };
         db.CastGroups.AddRange(gold, blue);
-
-        var advanced = new LevelGroup { ProductionId = annie.Id, Name = "Advanced", Level = "Advanced", MinAge = 13, MaxAge = 18, Color = "#A855F7", OrderIndex = 1 };
-        var intermediate = new LevelGroup { ProductionId = annie.Id, Name = "Intermediate", Level = "Intermediate", MinAge = 10, MaxAge = 13, Color = "#14B8A6", OrderIndex = 2 };
-        var beginner = new LevelGroup { ProductionId = annie.Id, Name = "Beginner", Level = "Beginner", MinAge = 8, MaxAge = 10, Color = "#22C55E", OrderIndex = 3 };
-        db.LevelGroups.AddRange(advanced, intermediate, beginner);
         await db.SaveChangesAsync();
-
-        LevelGroup LevelFor(Performer k)
-        {
-            var age = today.Year - k.DateOfBirth!.Value.Year;
-            return age >= 13 ? advanced : age >= 10 ? intermediate : beginner;
-        }
 
         // Everyone in Annie; first 6 kids Gold, rest Blue; one show note.
         var memberships = kids.Select((k, i) => new CastMembership
@@ -156,7 +145,6 @@ public class DemoSeeder : IHostedService
             ProductionId = annie.Id,
             PerformerId = k.Id,
             CastGroupId = i < 6 ? gold.Id : blue.Id,
-            LevelGroupId = LevelFor(k).Id,
             Notes = i == 0 ? "Understudy: Emma. Mic 4." : null,
         }).ToList();
         db.CastMemberships.AddRange(memberships);

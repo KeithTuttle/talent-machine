@@ -7,12 +7,11 @@ import { toast } from '@/lib/toast'
 import { ageOn } from '@/lib/age'
 import { conflictLabel } from '@/lib/conflicts'
 import ColorDot from '@/components/ColorDot.vue'
-import type { CastGroup, CastMembership, Conflict, Guardian, LevelGroup, PerformerGuardian } from '@/types'
+import type { CastGroup, CastMembership, Conflict, Guardian, PerformerGuardian } from '@/types'
 
 const props = defineProps<{
   member: CastMembership | null
   castGroup: CastGroup | null
-  levelGroup: LevelGroup | null
   showDate?: string | null
 }>()
 const emit = defineEmits<{ close: [] }>()
@@ -105,12 +104,6 @@ async function saveShowNotes() {
           class="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
         >
           <ColorDot :color="castGroup.color" size="sm" /> {{ castGroup.name }}
-        </span>
-        <span
-          v-if="levelGroup"
-          class="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
-        >
-          <ColorDot :color="levelGroup.color" size="sm" /> {{ levelGroup.name }}
         </span>
       </div>
 

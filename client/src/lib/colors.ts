@@ -12,6 +12,14 @@ export const GROUP_COLORS = [
   { name: 'Brown', hex: '#926B4B' },
 ]
 
+/** Dot colors by performer gender (dance-manager's overview convention). */
+export const GENDER_COLORS: Record<string, string> = {
+  Male: '#2563EB',
+  Female: '#DB2777',
+  NonBinary: '#A855F7',
+}
+export const GENDER_FALLBACK = '#94A3B8'
+
 /** Translucent background from a hex color (keeps text readable in both themes). */
 export function tint(hex?: string | null, alpha = 0.18): string | undefined {
   if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return undefined

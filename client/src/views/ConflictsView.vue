@@ -9,18 +9,17 @@ import { WEEKDAYS, conflictLabel, occursOn, toIsoDate, parseDate } from '@/lib/c
 import ColorDot from '@/components/ColorDot.vue'
 import CsvImportDialog from '@/components/CsvImportDialog.vue'
 import { useScopeStore } from '@/stores/scope'
-import type { CastGroup, CastMembership, Conflict, LevelGroup, Weekday } from '@/types'
+import type { CastGroup, CastMembership, Conflict, Weekday } from '@/types'
 
 const scope = useScopeStore()
 
 const cast = ref<CastMembership[]>([])
 const groups = ref<CastGroup[]>([])
-const levelGroups = ref<LevelGroup[]>([])
 const conflicts = ref<Conflict[]>([])
 
 const lens = ref<'calendar' | 'kid' | 'date'>('calendar')
 const search = ref('')
-const groupFilter = ref('') // '', 'cg:<id>', 'lg:<id>'
+const groupFilter = ref('') // '' or 'cg:<id>'
 const importOpen = ref(false)
 
 // --- Loading -----------------------------------------------------------------
@@ -39,14 +38,12 @@ async function loadAll() {
   if (pid === null) {
     cast.value = []
     groups.value = []
-    levelGroups.value = []
     conflicts.value = []
     return
   }
-  ;[cast.value, groups.value, levelGroups.value, conflicts.value] = await Promise.all([
+  ;[cast.value, groups.value, conflicts.value] = await Promise.all([
     safeGet<CastMembership>(`/castmemberships?productionId=${pid}`),
     safeGet<CastGroup>(`/castgroups?productionId=${pid}`),
-    safeGet<LevelGroup>(`/levelgroups?productionId=${pid}`),
     safeGet<Conflict>(`/conflicts?productionId=${pid}`),
   ])
 }
@@ -62,15 +59,13 @@ const performerName = (performerId: number) => {
 }
 const firstName = (performerId: number) =>
   memberOf(performerId)?.performer?.firstName ?? `#${performerId}`
-const levelColor = (performerId: number) => {
+const groupColor = (performerId: number) => {
   const m = memberOf(performerId)
-  return levelGroups.value.find((g) => g.id === m?.levelGroupId)?.color ?? null
+  return groups.value.find((g) => g.id === m?.castGroupId)?.color ?? null
 }
 
 function memberPassesFilter(m: CastMembership): boolean {
   if (groupFilter.value.startsWith('cg:') && m.castGroupId !== Number(groupFilter.value.slice(3)))
-    return false
-  if (groupFilter.value.startsWith('lg:') && m.levelGroupId !== Number(groupFilter.value.slice(3)))
     return false
   const q = search.value.trim().toLowerCase()
   if (q) {
@@ -269,12 +264,7 @@ const showDate = computed(() => scope.selectedProduction?.showDate)
           class="rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         >
           <option value="">All groups</option>
-          <optgroup v-if="groups.length" label="Cast groups">
-            <option v-for="g in groups" :key="`cg${g.id}`" :value="`cg:${g.id}`">{{ g.name }}</option>
-          </optgroup>
-          <optgroup v-if="levelGroups.length" label="Level groups">
-            <option v-for="g in levelGroups" :key="`lg${g.id}`" :value="`lg:${g.id}`">{{ g.name }}</option>
-          </optgroup>
+          <option v-for="g in groups" :key="g.id" :value="`cg:${g.id}`">{{ g.name }}</option>
         </select>
       </div>
 
@@ -318,7 +308,7 @@ const showDate = computed(() => scope.selectedProduction?.showDate)
                   v-for="c in conflictsOn(cell.date).slice(0, 3)"
                   :key="c.id"
                   class="mt-0.5 block truncate rounded px-1 text-[11px] leading-4"
-                  :style="{ backgroundColor: tint(levelColor(c.performerId)) ?? 'hsl(var(--muted))' }"
+                  :style="{ backgroundColor: tint(groupColor(c.performerId)) ?? 'hsl(var(--muted))' }"
                 >
                   {{ firstName(c.performerId) }}
                 </span>
@@ -340,7 +330,7 @@ const showDate = computed(() => scope.selectedProduction?.showDate)
           </p>
           <ul v-else class="mt-2 space-y-1">
             <li v-for="c in selectedDayConflicts" :key="c.id" class="flex items-center gap-2 text-sm">
-              <ColorDot :color="levelColor(c.performerId)" size="sm" />
+              <ColorDot :color="groupColor(c.performerId)" size="sm" />
               <span class="font-medium">{{ performerName(c.performerId) }}</span>
               <span class="text-xs text-muted-foreground">{{ conflictLabel(c) }}</span>
               <span v-if="c.reason" class="truncate text-xs text-muted-foreground">— {{ c.reason }}</span>
@@ -356,7 +346,7 @@ const showDate = computed(() => scope.selectedProduction?.showDate)
         </p>
         <div v-for="m in filteredCast" :key="m.id" class="rounded-lg border border-border">
           <div class="flex items-center gap-2 px-4 py-2.5">
-            <ColorDot :color="levelColor(m.performerId)" size="sm" />
+            <ColorDot :color="groupColor(m.performerId)" size="sm" />
             <span class="flex-1 text-sm font-medium">
               {{ performerName(m.performerId) }}
               <span v-if="ageOn(m.performer?.dateOfBirth, showDate) !== null" class="ml-1 text-xs font-normal text-muted-foreground">
@@ -443,7 +433,7 @@ const showDate = computed(() => scope.selectedProduction?.showDate)
           </h3>
           <ul class="mt-1 space-y-0.5">
             <li v-for="c in day.conflicts" :key="c.id" class="flex items-center gap-2 text-sm">
-              <ColorDot :color="levelColor(c.performerId)" size="sm" />
+              <ColorDot :color="groupColor(c.performerId)" size="sm" />
               {{ performerName(c.performerId) }}
               <span v-if="c.reason" class="truncate text-xs text-muted-foreground">— {{ c.reason }}</span>
               <span v-if="c.type === 'Weekly'" class="text-xs text-muted-foreground">({{ conflictLabel(c) }})</span>

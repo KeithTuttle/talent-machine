@@ -27,7 +27,6 @@ public class AppDbContext : DbContext
     public DbSet<Production> Productions => Set<Production>();
     public DbSet<Performer> Performers => Set<Performer>();
     public DbSet<CastGroup> CastGroups => Set<CastGroup>();
-    public DbSet<LevelGroup> LevelGroups => Set<LevelGroup>();
     public DbSet<CastMembership> CastMemberships => Set<CastMembership>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<MusicalNumber> Numbers => Set<MusicalNumber>();
@@ -82,10 +81,6 @@ public class AppDbContext : DbContext
         // membership falls back to "ungrouped" (CastGroupId null).
         b.Entity<CastMembership>()
             .HasOne(x => x.CastGroup).WithMany().HasForeignKey(x => x.CastGroupId)
-            .OnDelete(DeleteBehavior.SetNull);
-        // Same for level groups: deleting one leaves kids in the show, unleveled.
-        b.Entity<CastMembership>()
-            .HasOne(x => x.LevelGroup).WithMany().HasForeignKey(x => x.LevelGroupId)
             .OnDelete(DeleteBehavior.SetNull);
         // Deleting a performer removes their production memberships and number casts.
         b.Entity<CastMembership>()
