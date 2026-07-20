@@ -43,6 +43,10 @@ public class AppDbContext : DbContext
     /// <summary>Tenant used by the query filter; 0 (matches nothing) when unresolved.</summary>
     private int CurrentTenantId => _tenant.TenantId ?? 0;
 
+    // Unique placeholders for cleared client-supplied keys (see ResetStoreGeneratedKeys).
+    // Far below EF's own temporary-value range to avoid collisions.
+    private static int _clearedKeySeed = -1_000_000_000;
+
     private static readonly MethodInfo ConfigureTenantFilterMethod = typeof(AppDbContext)
         .GetMethod(nameof(ConfigureTenantScope), BindingFlags.Instance | BindingFlags.NonPublic)!;
 
@@ -183,6 +187,11 @@ public class AppDbContext : DbContext
     /// </summary>
     private void ResetStoreGeneratedKeys()
     {
+        // Guards a Postgres-specific hazard (IDENTITY BY DEFAULT honoring client
+        // values). The in-memory demo provider assigns REAL ids at Add time
+        // (never temporary), which this loop would wrongly treat as client input.
+        if (Database.IsInMemory()) return;
+
         foreach (var entry in ChangeTracker.Entries())
         {
             if (entry.State != EntityState.Added) continue;
@@ -193,7 +202,20 @@ public class AppDbContext : DbContext
                 if (prop.ValueGenerated == Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAdd
                     && (prop.ClrType == typeof(int) || prop.ClrType == typeof(long)))
                 {
-                    entry.Property(prop.Name).CurrentValue = Activator.CreateInstance(prop.ClrType);
+                    var property = entry.Property(prop.Name);
+                    // EF's own placeholder (entity added with default id) — the
+                    // store already assigns; leave it alone.
+                    if (property.IsTemporary) continue;
+                    // Client-supplied value: replace with a UNIQUE placeholder
+                    // (a shared constant like 0 would collide in the identity map
+                    // when several rows of one type are saved together), then mark
+                    // temporary so the database generates the real key.
+                    var placeholder = Interlocked.Decrement(ref _clearedKeySeed);
+                    // Box exactly the key's CLR type (a long boxed into an int key throws).
+                    property.CurrentValue = prop.ClrType == typeof(long)
+                        ? (object)(long)placeholder
+                        : (object)placeholder;
+                    property.IsTemporary = true;
                 }
             }
         }

@@ -24,6 +24,21 @@ cd server && dotnet tool restore && dotnet build
 cd client && npm install
 ```
 
+### Demo mode (no database needed)
+
+To try the app with realistic sample data (a seeded "Annie JR." production —
+kids, guardians, groups, casting, conflicts, rehearsals, attendance) before
+setting up any database, put this in the gitignored
+`server/TalentMachine.Api/appsettings.Development.local.json`:
+
+```json
+{ "Database": { "UseInMemory": true } }
+```
+
+The API then runs on an in-memory database that reseeds on every restart —
+nothing persists, which is the point. Set it back to `false` (or remove it)
+once a real connection string is configured.
+
 ### Database
 
 **Option A — local Docker:** `docker compose up -d`. The committed placeholder

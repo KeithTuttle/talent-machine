@@ -28,8 +28,21 @@ builder.Configuration.AddJsonFile("appsettings.Development.local.json", optional
 
 const string CorsPolicy = "spa";
 
+// Demo mode: Database:UseInMemory=true runs on EF's in-memory provider with
+// seeded sample data — no Postgres, no migrations, resets on restart. For
+// trying the app before any real database exists.
+var useInMemoryDb = builder.Configuration.GetValue<bool>("Database:UseInMemory");
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+{
+    if (useInMemoryDb)
+        options.UseInMemoryDatabase("talentmachine-demo");
+    else
+        options.UseNpgsql(builder.Configuration.GetConnectionString("Default"));
+});
+
+if (useInMemoryDb)
+    builder.Services.AddHostedService<TalentMachine.Api.Data.DemoSeeder>();
 
 // Per-request tenant, resolved by TenantResolutionMiddleware, read by AppDbContext.
 builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
@@ -141,6 +154,11 @@ try
 }
 catch { /* unparseable / missing */ }
 
+if (useInMemoryDb)
+    app.Logger.LogWarning(
+        "DEMO MODE: in-memory database with seeded sample data — nothing persists across restarts. " +
+        "Set Database:UseInMemory to false (and configure ConnectionStrings:Default) for a real database.");
+else
 app.Logger.LogInformation(
     "Environment: {Env}; Database host: {DbHost}{Note}",
     app.Environment.EnvironmentName, dbHost,
