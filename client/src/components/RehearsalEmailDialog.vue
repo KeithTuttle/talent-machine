@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+// Preview-and-send: shows the exact email (subject, body, recipients) the server
+// will send, with the schedule PDF attached, then sends server-side on an
+// explicit click. Nothing auto-sends.
+import { ref, watch } from 'vue'
 import {
   DialogRoot,
   DialogPortal,
@@ -8,91 +11,77 @@ import {
   DialogTitle,
   DialogDescription,
 } from 'reka-ui'
-import { Mail } from 'lucide-vue-next'
-import { formatTime } from '@/lib/rehearsals'
-import type { CastMembership, Guardian, MusicalNumber, PerformerGuardian, Rehearsal } from '@/types'
+import { AlertTriangle, Loader2, Mail } from 'lucide-vue-next'
+import { api } from '@/lib/api'
+import { toast } from '@/lib/toast'
 
 const props = defineProps<{
   open: boolean
-  productionTitle: string
-  weekLabel: string
-  /** This week's slots, in order. */
-  slots: Rehearsal[]
-  numbers: MusicalNumber[]
-  cast: CastMembership[]
-  guardians: Guardian[]
-  links: PerformerGuardian[]
-  /** performerIds scheduled this week (resolved attendees across slots). */
-  scheduledPerformerIds: number[]
-  onDownloadPdf: () => void
+  productionId: number
+  from: string
+  to: string
 }>()
 const emit = defineEmits<{ close: [] }>()
 
+interface Preview {
+  configured: boolean
+  subject: string
+  body: string
+  recipients: string[]
+  missingEmail: string[]
+}
+
 const audience = ref<'all' | 'scheduled'>('all')
+const preview = ref<Preview | null>(null)
+const loading = ref(false)
+const sending = ref(false)
 
-const relevantPerformerIds = computed(() =>
-  audience.value === 'all'
-    ? props.cast.map((m) => m.performerId)
-    : props.scheduledPerformerIds,
-)
-
-const recipients = computed(() => {
-  const guardianIds = new Set(
-    props.links
-      .filter((l) => relevantPerformerIds.value.includes(l.performerId))
-      .map((l) => l.guardianId),
-  )
-  const emails = props.guardians
-    .filter((g) => guardianIds.has(g.id) && g.email)
-    .map((g) => g.email!.trim())
-  return [...new Set(emails)]
-})
-
-/** Kids in the audience with no guardian email on file. */
-const missing = computed(() =>
-  props.cast
-    .filter((m) => relevantPerformerIds.value.includes(m.performerId))
-    .filter((m) => {
-      const gids = props.links.filter((l) => l.performerId === m.performerId).map((l) => l.guardianId)
-      return !props.guardians.some((g) => gids.includes(g.id) && g.email)
+async function loadPreview() {
+  loading.value = true
+  preview.value = null
+  try {
+    const { data } = await api.post<Preview>('/rehearsals/email/preview', {
+      productionId: props.productionId,
+      from: props.from,
+      to: props.to,
+      audience: audience.value,
     })
-    .map((m) => `${m.performer?.firstName ?? ''} ${m.performer?.lastName ?? ''}`.trim()),
+    preview.value = data
+  } catch {
+    preview.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+// Reload the preview whenever the dialog opens or the audience changes.
+watch(
+  () => [props.open, audience.value] as const,
+  ([isOpen]) => {
+    if (isOpen) loadPreview()
+  },
+  { immediate: true },
 )
 
-const numberTitle = (id?: number | null) =>
-  props.numbers.find((n) => n.id === id)?.title ?? 'General'
-
-const body = computed(() => {
-  const lines: string[] = [
-    `Rehearsal schedule — ${props.productionTitle}`,
-    props.weekLabel,
-    '',
-  ]
-  let currentDate = ''
-  for (const s of props.slots) {
-    if (s.date !== currentDate) {
-      currentDate = s.date
-      const d = new Date(`${s.date}T00:00:00`)
-      lines.push(d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))
+async function send() {
+  if (!preview.value || preview.value.recipients.length === 0) return
+  sending.value = true
+  try {
+    const { data } = await api.post<{ sent: boolean; count: number }>('/rehearsals/email/send', {
+      productionId: props.productionId,
+      from: props.from,
+      to: props.to,
+      audience: audience.value,
+    })
+    if (data.sent) {
+      toast.success(`Schedule emailed to ${data.count} guardian${data.count === 1 ? '' : 's'}`)
+      emit('close')
+    } else {
+      toast.error("Couldn't send — check that email is configured on the server.")
     }
-    lines.push(
-      `  ${formatTime(s.startTime)}–${formatTime(s.endTime)}  ${numberTitle(s.musicalNumberId)} (${s.type})` +
-        (s.notes ? ` — ${s.notes}` : ''),
-    )
+  } finally {
+    sending.value = false
   }
-  lines.push('', 'The full schedule PDF is attached.', '', 'See you there!')
-  return lines.join('\n')
-})
-
-const mailtoHref = computed(() => {
-  const subject = `Rehearsal schedule: ${props.productionTitle} — ${props.weekLabel}`
-  return `mailto:?bcc=${encodeURIComponent(recipients.value.join(','))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.value)}`
-})
-
-function openEmail() {
-  // Download the PDF alongside so it can be attached manually (mailto can't attach).
-  props.onDownloadPdf()
-  window.location.href = mailtoHref.value
 }
 </script>
 
@@ -101,13 +90,13 @@ function openEmail() {
     <DialogPortal>
       <DialogOverlay class="fixed inset-0 z-[90] bg-black/40" />
       <DialogContent
-        class="fixed left-1/2 top-1/2 z-[100] max-h-[85vh] w-[calc(100%-2rem)] max-w-md -translate-y-1/2 -translate-x-1/2 overflow-y-auto rounded-lg border border-border bg-background p-5 shadow-xl focus:outline-none"
+        class="fixed left-1/2 top-1/2 z-[100] max-h-[85vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-border bg-background p-5 shadow-xl focus:outline-none"
       >
         <DialogTitle class="text-base font-semibold">Email the schedule</DialogTitle>
         <DialogDescription class="mt-1.5 text-sm text-muted-foreground">
-          Opens your own email app with recipients and a formatted schedule pre-filled
-          (as BCC, so families don't see each other's addresses). The PDF downloads
-          alongside — attach it before sending. Nothing sends automatically.
+          This is exactly what will be sent — the schedule PDF is attached, and
+          recipients are BCC'd so families don't see each other's addresses. Nothing
+          sends until you click Send.
         </DialogDescription>
 
         <div class="mt-4 flex rounded-md border border-border text-sm">
@@ -122,17 +111,40 @@ function openEmail() {
           </button>
         </div>
 
-        <p class="mt-3 text-sm">
-          <span class="font-medium">{{ recipients.length }}</span> guardian email{{ recipients.length === 1 ? '' : 's' }}
-        </p>
-        <p v-if="recipients.length > 0" class="mt-1 max-h-24 overflow-y-auto break-all rounded-md border border-border p-2 text-xs text-muted-foreground">
-          {{ recipients.join(', ') }}
-        </p>
-        <p v-if="missing.length > 0" class="mt-2 text-xs text-destructive">
-          No guardian email on file: {{ missing.join(', ') }}
-        </p>
+        <div v-if="loading" class="mt-6 flex justify-center text-muted-foreground">
+          <Loader2 class="h-5 w-5 animate-spin" />
+        </div>
 
-        <div class="mt-4 flex justify-end gap-2">
+        <div v-else-if="preview" class="mt-4 space-y-3">
+          <p v-if="!preview.configured" class="flex items-center gap-1.5 rounded-md bg-muted p-2 text-xs text-muted-foreground">
+            <AlertTriangle class="h-3.5 w-3.5" />
+            Server email isn't configured yet, so Send is disabled. (Set the Gmail app password.)
+          </p>
+
+          <div class="rounded-md border border-border">
+            <div class="border-b border-border px-3 py-2 text-sm">
+              <span class="text-xs font-medium text-muted-foreground">Subject:</span>
+              {{ preview.subject }}
+            </div>
+            <pre class="max-h-56 overflow-y-auto whitespace-pre-wrap px-3 py-2 font-sans text-xs leading-relaxed text-foreground">{{ preview.body }}</pre>
+            <div class="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+              📎 rehearsals-{{ from }}.pdf
+            </div>
+          </div>
+
+          <p class="text-sm">
+            <span class="font-medium">{{ preview.recipients.length }}</span>
+            guardian email{{ preview.recipients.length === 1 ? '' : 's' }} (BCC)
+          </p>
+          <p v-if="preview.recipients.length > 0" class="max-h-20 overflow-y-auto break-all rounded-md border border-border p-2 text-xs text-muted-foreground">
+            {{ preview.recipients.join(', ') }}
+          </p>
+          <p v-if="preview.missingEmail.length > 0" class="text-xs text-destructive">
+            No guardian email on file: {{ preview.missingEmail.join(', ') }}
+          </p>
+        </div>
+
+        <div class="mt-5 flex justify-end gap-2">
           <button
             class="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent"
             @click="emit('close')"
@@ -141,10 +153,13 @@ function openEmail() {
           </button>
           <button
             class="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-            :disabled="recipients.length === 0"
-            @click="openEmail"
+            :disabled="!preview || !preview.configured || preview.recipients.length === 0 || sending"
+            :title="!preview?.configured ? 'Server email is not configured' : ''"
+            @click="send"
           >
-            <Mail class="h-4 w-4" /> Open email + download PDF
+            <Loader2 v-if="sending" class="h-4 w-4 animate-spin" />
+            <Mail v-else class="h-4 w-4" />
+            {{ sending ? 'Sending…' : `Send to ${preview?.recipients.length ?? 0}` }}
           </button>
         </div>
       </DialogContent>

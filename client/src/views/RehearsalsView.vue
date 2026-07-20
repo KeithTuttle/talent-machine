@@ -36,10 +36,8 @@ import type {
   AttendanceStatus,
   CastMembership,
   Conflict,
-  Guardian,
   MusicalNumber,
   NumberCast,
-  PerformerGuardian,
   Rehearsal,
   RehearsalAttendance,
   RehearsalAttendee,
@@ -54,8 +52,6 @@ const numbers = ref<MusicalNumber[]>([])
 const cast = ref<CastMembership[]>([])
 const numberCasts = ref<NumberCast[]>([])
 const conflicts = ref<Conflict[]>([])
-const guardians = ref<Guardian[]>([])
-const guardianLinks = ref<PerformerGuardian[]>([])
 const attendance = ref<RehearsalAttendance[]>([])
 
 const lens = ref<'list' | 'calendar' | 'attendance'>('list')
@@ -96,8 +92,6 @@ async function loadAll() {
     cast.value,
     numberCasts.value,
     conflicts.value,
-    guardians.value,
-    guardianLinks.value,
     attendance.value,
   ] = await Promise.all([
     safeGet<Rehearsal>(`/rehearsals?productionId=${pid}`),
@@ -106,8 +100,6 @@ async function loadAll() {
     safeGet<CastMembership>(`/castmemberships?productionId=${pid}`),
     safeGet<NumberCast>(`/numbercast?productionId=${pid}`),
     safeGet<Conflict>(`/conflicts?productionId=${pid}`),
-    safeGet<Guardian>('/guardians'),
-    safeGet<PerformerGuardian>('/performerguardians'),
     safeGet<RehearsalAttendance>(`/rehearsalattendance?productionId=${pid}`),
   ])
 }
@@ -152,12 +144,6 @@ const weekDays = computed(() => {
 const attendeesOf = (s: Rehearsal) => resolveAttendees(s, numberCasts.value, overrides.value)
 const warningsOf = (s: Rehearsal) =>
   conflictedAttendees(attendeesOf(s), s.date, conflicts.value).map(performerName)
-
-const scheduledThisWeek = computed(() => {
-  const ids = new Set<number>()
-  for (const s of weekSlots.value) for (const id of attendeesOf(s)) ids.add(id)
-  return [...ids]
-})
 
 const dayLabel = (date: string) =>
   parseDate(date)?.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) ?? date
@@ -761,15 +747,9 @@ const slotsOnDate = (iso: string) =>
 
       <RehearsalEmailDialog
         :open="emailOpen"
-        :production-title="scope.selectedProduction?.title ?? ''"
-        :week-label="label"
-        :slots="weekSlots"
-        :numbers="numbers"
-        :cast="cast"
-        :guardians="guardians"
-        :links="guardianLinks"
-        :scheduled-performer-ids="scheduledThisWeek"
-        :on-download-pdf="downloadPdf"
+        :production-id="scope.selectedProductionId"
+        :from="range.from"
+        :to="range.to"
         @close="emailOpen = false"
       />
       <RehearsalSuggestDialog

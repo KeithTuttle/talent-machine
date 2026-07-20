@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using TalentMachine.Api.Auth;
 using TalentMachine.Api.Data;
 using TalentMachine.Api.Models;
+using TalentMachine.Api.Services;
 
 namespace TalentMachine.Api.Controllers;
 
@@ -23,21 +24,23 @@ public class TeamController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ICurrentTenant _tenant;
+    private readonly EmailService _email;
 
-    public TeamController(AppDbContext db, ICurrentTenant tenant)
+    public TeamController(AppDbContext db, ICurrentTenant tenant, EmailService email)
     {
         _db = db;
         _tenant = tenant;
+        _email = email;
     }
 
     public record MemberDto(
         int Id, string Role, string? Email, string? DisplayName, bool IsYou,
         List<int> ProductionIds);
     public record InvitationDto(
-        int Id, string Code, string? Email, string Role, DateTimeOffset CreatedAt,
-        int? ProductionId);
+        int Id, string Code, string Name, string Email, string Role, DateTimeOffset CreatedAt,
+        int? ProductionId, bool EmailSent, bool CanEmail);
     public record TeamResponse(string TenantName, string YourRole, List<MemberDto> Members, List<InvitationDto> Invitations);
-    public record CreateInviteRequest(string? Email, int? ProductionId);
+    public record CreateInviteRequest(string Name, string Email, int? ProductionId);
     public record JoinRequest(string Code);
     public record JoinResponse(string TenantName);
     public record AccessRequest(int ProductionId);
@@ -79,7 +82,9 @@ public class TeamController : ControllerBase
                 .OrderByDescending(i => i.CreatedAt)
                 .ToListAsync();
             invites = rows
-                .Select(i => new InvitationDto(i.Id, i.Code, i.Email, i.Role.ToString(), i.CreatedAt, i.ProductionId))
+                .Select(i => new InvitationDto(
+                    i.Id, i.Code, i.Name, i.Email, i.Role.ToString(), i.CreatedAt,
+                    i.ProductionId, i.EmailSentAt != null, _email.IsConfigured))
                 .ToList();
         }
 
@@ -87,12 +92,14 @@ public class TeamController : ControllerBase
         return new TeamResponse(tenantName, yourRole, memberDtos, invites);
     }
 
-    // POST /api/team/invitations — create a join-code invite (owners only),
-    // optionally scoped to one show the invitee will get access to.
+    // POST /api/team/invitations — create a join-code invite (owners only) and
+    // email the access instructions automatically. Optionally scoped to one show.
     [HttpPost("invitations")]
     public async Task<ActionResult<InvitationDto>> CreateInvite(CreateInviteRequest input)
     {
         if (!_tenant.IsOwner()) return StatusCode(403);
+        if (string.IsNullOrWhiteSpace(input.Name)) return BadRequest("Enter the person's name.");
+        if (string.IsNullOrWhiteSpace(input.Email)) return BadRequest("Enter an email address.");
 
         if (input.ProductionId is not null)
         {
@@ -103,7 +110,8 @@ public class TeamController : ControllerBase
 
         var invite = new Invitation
         {
-            Email = string.IsNullOrWhiteSpace(input.Email) ? null : input.Email.Trim(),
+            Name = input.Name.Trim(),
+            Email = input.Email.Trim(),
             Role = MembershipRole.Member,
             ProductionId = input.ProductionId,
         };
@@ -124,8 +132,54 @@ public class TeamController : ControllerBase
             }
         }
 
-        return new InvitationDto(invite.Id, invite.Code, invite.Email, invite.Role.ToString(), invite.CreatedAt, invite.ProductionId);
+        // Keep the invitee in the reusable staff directory (autocomplete).
+        await EnsureStaffMemberAsync(invite.Name, invite.Email);
+        await TrySendInviteAsync(invite);
+
+        return ToDto(invite);
     }
+
+    // POST /api/team/invitations/{id}/send — (re)send the access email (owners only).
+    [HttpPost("invitations/{id:int}/send")]
+    public async Task<ActionResult<InvitationDto>> ResendInvite(int id)
+    {
+        if (!_tenant.IsOwner()) return StatusCode(403);
+        var invite = await _db.Invitations.FirstOrDefaultAsync(i => i.Id == id && i.AcceptedAt == null);
+        if (invite is null) return NotFound();
+        if (!_email.IsConfigured)
+            return BadRequest("Email isn't set up on the server yet — copy the code instead.");
+        var sent = await TrySendInviteAsync(invite);
+        if (!sent) return BadRequest("Couldn't send the email — check the server logs, or copy the code instead.");
+        return ToDto(invite);
+    }
+
+    private async Task<bool> TrySendInviteAsync(Invitation invite)
+    {
+        if (!_email.IsConfigured || string.IsNullOrWhiteSpace(invite.Email)) return false;
+        var tenantName = await _db.Tenants
+            .Where(t => t.Id == invite.TenantId).Select(t => t.Name).FirstOrDefaultAsync() ?? "the team";
+        var sent = await _email.SendInviteEmailAsync(invite.Email, invite.Name, tenantName, invite.Code);
+        if (sent)
+        {
+            invite.EmailSentAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+        return sent;
+    }
+
+    private async Task EnsureStaffMemberAsync(string name, string email)
+    {
+        var exists = await _db.StaffMembers.AnyAsync(s => s.Email == email);
+        if (!exists)
+        {
+            _db.StaffMembers.Add(new StaffMember { Name = name, Email = email });
+            await _db.SaveChangesAsync();
+        }
+    }
+
+    private InvitationDto ToDto(Invitation i) => new(
+        i.Id, i.Code, i.Name, i.Email, i.Role.ToString(), i.CreatedAt,
+        i.ProductionId, i.EmailSentAt != null, _email.IsConfigured);
 
     // DELETE /api/team/invitations/{id} — revoke a pending invite (owners only).
     [HttpDelete("invitations/{id:int}")]

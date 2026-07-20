@@ -204,10 +204,13 @@ export interface TeamMember {
 export interface TeamInvitation {
   id: number
   code: string
-  email?: string | null
+  name: string
+  email: string
   role: string
   createdAt: string
   productionId?: number | null
+  emailSent: boolean
+  canEmail: boolean
 }
 
 export interface TeamResponse {

@@ -26,6 +26,9 @@ public class RehearsalsController : ControllerBase
     public record BulkRequest(int ProductionId, List<Rehearsal> Rehearsals);
     public record SuggestRequest(int ProductionId, string? Prompt, DateOnly FromDate, DateOnly ToDate);
     public record SuggestResponse(bool Configured, bool Ok, List<SuggestedSlot> Slots);
+    public record EmailRequest(int ProductionId, DateOnly From, DateOnly To, string Audience);
+    public record EmailPreview(bool Configured, string Subject, string Body, List<string> Recipients, List<string> MissingEmail);
+    public record EmailResult(bool Sent, int Count);
 
     // GET /api/rehearsals?productionId=&from=&to=
     [HttpGet]
@@ -163,5 +166,144 @@ public class RehearsalsController : ControllerBase
             cast, conflicts));
 
         return new SuggestResponse(result.Configured, result.Ok, result.Slots);
+    }
+
+    // POST /api/rehearsals/email/preview — the exact email that WILL be sent
+    // (subject, body, recipient list), without sending anything.
+    [HttpPost("email/preview")]
+    public async Task<ActionResult<EmailPreview>> EmailPreviewAction(
+        EmailRequest input, [FromServices] EmailService email)
+    {
+        if (!_tenant.CanAccessProduction(input.ProductionId)) return StatusCode(403);
+        var built = await BuildEmailAsync(input);
+        if (built is null) return NotFound();
+        return new EmailPreview(email.IsConfigured, built.Value.Subject, built.Value.Body,
+            built.Value.Recipients, built.Value.Missing);
+    }
+
+    // POST /api/rehearsals/email/send — send the schedule (PDF attached) to the
+    // chosen guardians. Never auto-sends; the client calls this on an explicit click.
+    [HttpPost("email/send")]
+    public async Task<ActionResult<EmailResult>> EmailSend(
+        EmailRequest input, [FromServices] EmailService email, [FromServices] RehearsalPdfService pdf)
+    {
+        if (!_tenant.CanAccessProduction(input.ProductionId)) return StatusCode(403);
+        if (!email.IsConfigured) return new EmailResult(false, 0);
+        var built = await BuildEmailAsync(input);
+        if (built is null) return NotFound();
+        if (built.Value.Recipients.Count == 0) return new EmailResult(false, 0);
+
+        var bytes = pdf.Build(built.Value.PdfData);
+        var sent = await email.SendAsync(built.Value.Recipients, built.Value.Subject, built.Value.Body,
+            bytes, $"rehearsals-{input.From:yyyy-MM-dd}.pdf");
+        return new EmailResult(sent, sent ? built.Value.Recipients.Count : 0);
+    }
+
+    private readonly record struct BuiltEmail(
+        string Subject, string Body, List<string> Recipients, List<string> Missing, RehearsalPdfData PdfData);
+
+    /// <summary>Resolves recipients + composes the body once, shared by preview and send.</summary>
+    private async Task<BuiltEmail?> BuildEmailAsync(EmailRequest input)
+    {
+        var production = await _db.FindScopedAsync<Production>(input.ProductionId);
+        if (production is null) return null;
+
+        var slots = await _db.Rehearsals
+            .Where(r => r.ProductionId == input.ProductionId && r.Date >= input.From && r.Date <= input.To)
+            .OrderBy(r => r.Date).ThenBy(r => r.StartTime).ToListAsync();
+        var slotIds = slots.Select(s => s.Id).ToList();
+        var numbers = await _db.Numbers.Where(n => n.ProductionId == input.ProductionId).ToListAsync();
+        var numberIds = numbers.Select(n => n.Id).ToList();
+        var numberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync();
+        var overrides = await _db.RehearsalAttendees.Where(a => slotIds.Contains(a.RehearsalId)).ToListAsync();
+        var castByNumber = numberCasts.ToLookup(c => c.MusicalNumberId, c => c.PerformerId);
+
+        // Audience performers: whole cast, or only kids scheduled this week.
+        HashSet<int> audienceIds;
+        if (input.Audience == "scheduled")
+        {
+            audienceIds = new HashSet<int>();
+            foreach (var slot in slots)
+                foreach (var pid in RehearsalResolver.ResolveAttendees(slot, castByNumber, overrides))
+                    audienceIds.Add(pid);
+        }
+        else
+        {
+            audienceIds = (await _db.CastMemberships
+                .Where(m => m.ProductionId == input.ProductionId).Select(m => m.PerformerId).ToListAsync())
+                .ToHashSet();
+        }
+
+        var performers = await _db.Performers.Where(p => audienceIds.Contains(p.Id)).ToListAsync();
+        var links = await _db.PerformerGuardians.Where(l => audienceIds.Contains(l.PerformerId)).ToListAsync();
+        var guardians = await _db.Guardians.ToListAsync();
+        var guardianById = guardians.ToDictionary(g => g.Id);
+
+        var recipients = links
+            .Select(l => guardianById.GetValueOrDefault(l.GuardianId)?.Email)
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e => e!.Trim())
+            .Distinct()
+            .ToList();
+
+        var withEmail = new HashSet<int>(links
+            .Where(l => !string.IsNullOrWhiteSpace(guardianById.GetValueOrDefault(l.GuardianId)?.Email))
+            .Select(l => l.PerformerId));
+        var missing = performers.Where(p => !withEmail.Contains(p.Id))
+            .Select(p => $"{p.FirstName} {p.LastName}".Trim()).OrderBy(n => n).ToList();
+
+        var numberTitle = numbers.ToDictionary(n => n.Id, n => n.Title);
+        var subject = $"Rehearsal schedule: {production.Title} — {input.From:MMM d}–{input.To:MMM d, yyyy}";
+        var body = ComposeBody(production.Title, input.From, input.To, slots, numberTitle);
+
+        var pdfData = new RehearsalPdfData
+        {
+            ProductionTitle = production.Title,
+            From = input.From,
+            To = input.To,
+            Slots = slots,
+            Overrides = overrides,
+            NumberCasts = numberCasts,
+            Numbers = numbers,
+            Performers = await _db.Performers.ToListAsync(),
+            Conflicts = await _db.Conflicts.Where(c => c.ProductionId == input.ProductionId).ToListAsync(),
+        };
+
+        return new BuiltEmail(subject, body, recipients, missing, pdfData);
+    }
+
+    private static string ComposeBody(
+        string title, DateOnly from, DateOnly to, List<Rehearsal> slots, Dictionary<int, string> numberTitle)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Rehearsal schedule — {title}");
+        sb.AppendLine($"{from:MMM d} – {to:MMM d, yyyy}");
+        sb.AppendLine();
+        if (slots.Count == 0)
+        {
+            sb.AppendLine("No rehearsals scheduled for this week.");
+        }
+        else
+        {
+            DateOnly? day = null;
+            foreach (var s in slots)
+            {
+                if (s.Date != day)
+                {
+                    day = s.Date;
+                    sb.AppendLine(s.Date.ToString("dddd, MMMM d"));
+                }
+                var name = s.MusicalNumberId is int nid && numberTitle.TryGetValue(nid, out var t) ? t : "General";
+                var line = $"  {s.StartTime:h:mm tt}–{s.EndTime:h:mm tt}  {name} ({s.Type})";
+                if (!string.IsNullOrWhiteSpace(s.Notes)) line += $" — {s.Notes}";
+                sb.AppendLine(line);
+            }
+        }
+        sb.AppendLine();
+        sb.AppendLine("The full schedule is attached as a PDF.");
+        sb.AppendLine();
+        sb.AppendLine("See you there!");
+        sb.AppendLine("— The Talent Machine Company");
+        return sb.ToString();
     }
 }

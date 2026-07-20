@@ -53,6 +53,8 @@ builder.Services.AddScoped<ShowOrderPdfService>();
 // AI rehearsal-schedule suggestions via Google Gemini (free tier).
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<RehearsalAiService>();
+// Outbound email (Gmail SMTP) for rehearsal schedules + team invites.
+builder.Services.AddScoped<EmailService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(o =>

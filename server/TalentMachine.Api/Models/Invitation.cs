@@ -16,10 +16,14 @@ public class Invitation : ITenantScoped
     /// <summary>Short join code the invitee enters (unique, unambiguous alphabet).</summary>
     public string Code { get; set; } = string.Empty;
 
-    /// <summary>Optional note of who this invite is for (informational only).</summary>
-    public string? Email { get; set; }
+    /// <summary>Who this invite is for — used to address the automated email.</summary>
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
 
     public MembershipRole Role { get; set; } = MembershipRole.Member;
+
+    /// <summary>Set when the access email last sent successfully; null if never sent.</summary>
+    public DateTimeOffset? EmailSentAt { get; set; }
 
     /// <summary>When set, redeeming this invite grants access to just this show
     /// (a ProductionAccess row). Owners can grant more shows later.</summary>
