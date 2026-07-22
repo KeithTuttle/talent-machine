@@ -8,6 +8,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Planner' },
   },
   {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: () => import('@/views/DashboardView.vue'),
+    meta: { title: 'Dashboard' },
+  },
+  {
     path: '/show-order',
     name: 'show-order',
     component: () => import('@/views/ShowOrderView.vue'),

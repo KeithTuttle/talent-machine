@@ -140,6 +140,53 @@ export interface NumberCharacter {
   roleId: number
 }
 
+// Dashboard aggregate (mirrors DashboardController's DTO records).
+export interface DashboardCountdown {
+  openingDate?: string | null
+  daysToOpen?: number | null
+}
+export interface DashboardRollups {
+  numbersTotal: number
+  teachComplete: number
+  teachTaught: number
+  teachNeedsReview: number
+  notTaught: number
+  numbersWithCast: number
+  rolesTotal: number
+  rolesCast: number
+  performersInShow: number
+}
+export interface DashboardWeekSlot {
+  id: number
+  date: string
+  startTime: string
+  endTime: string
+  type: RehearsalType
+  numberTitle?: string | null
+  attendees: number
+  conflicts: number
+}
+export interface DashboardAtRisk {
+  performerId: number
+  name: string
+  present: number
+  total: number
+  percent: number
+}
+export interface DashboardAttendance {
+  recordedSessions: number
+  avgPercent: number
+  atRisk: DashboardAtRisk[]
+}
+export interface Dashboard {
+  productionId: number
+  title: string
+  countdown: DashboardCountdown
+  rollups: DashboardRollups
+  thisWeek: DashboardWeekSlot[]
+  attendance: DashboardAttendance
+}
+
 export interface Formation {
   id: number
   musicalNumberId: number

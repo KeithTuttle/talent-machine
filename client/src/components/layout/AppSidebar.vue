@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
 import { useScopeStore } from '@/stores/scope'
 import {
+  LayoutDashboard,
   Drama,
   Users,
   CalendarClock,
@@ -34,6 +35,7 @@ const isDark = useDark()
 const toggleDark = useToggle(isDark)
 
 const nav = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/', label: 'Planner', icon: Drama },
   { to: '/show-order', label: 'Show Order', icon: ListOrdered },
   { to: '/script', label: 'Script', icon: Clapperboard },
