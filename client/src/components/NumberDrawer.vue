@@ -19,7 +19,9 @@ import type {
   CostumePiece,
   MusicalNumber,
   NumberCast,
+  NumberCharacter,
   Performer,
+  Role,
   TeachStatus,
 } from '@/types'
 
@@ -36,6 +38,8 @@ const emit = defineEmits<{ close: []; toggleCast: [numberId: number, performerId
 const staff = useStaffStore()
 const pieces = ref<CostumePiece[]>([])
 const assignments = ref<CostumeAssignment[]>([])
+const roles = ref<Role[]>([])
+const numberChars = ref<NumberCharacter[]>([])
 const tab = ref<'cast' | 'costumes' | 'formations'>('cast')
 
 watch(
@@ -43,17 +47,34 @@ watch(
   async (id) => {
     pieces.value = []
     assignments.value = []
+    numberChars.value = []
     tab.value = 'cast'
     staff.fetch()
-    if (id != null) {
-      ;[pieces.value, assignments.value] = await Promise.all([
+    if (id != null && props.number) {
+      ;[pieces.value, assignments.value, roles.value, numberChars.value] = await Promise.all([
         api.get<CostumePiece[]>(`/costumepieces?numberId=${id}`).then((r) => r.data).catch(() => []),
         api.get<CostumeAssignment[]>(`/costumeassignments?numberId=${id}`).then((r) => r.data).catch(() => []),
+        api.get<Role[]>(`/roles?productionId=${props.number.productionId}`).then((r) => r.data).catch(() => []),
+        api.get<NumberCharacter[]>(`/numbercharacters?numberId=${id}`).then((r) => r.data).catch(() => []),
       ])
     }
   },
   { immediate: true },
 )
+
+// --- Featured characters (additive tag over the performer cast) --------------
+const hasChar = (roleId: number) => numberChars.value.some((nc) => nc.roleId === roleId)
+async function toggleChar(roleId: number) {
+  if (!props.number) return
+  const id = props.number.id
+  if (hasChar(roleId)) {
+    numberChars.value = numberChars.value.filter((nc) => nc.roleId !== roleId)
+    await api.delete(`/numbercharacters?numberId=${id}&roleId=${roleId}`).catch(() => {})
+  } else {
+    numberChars.value.push({ musicalNumberId: id, roleId })
+    await api.post('/numbercharacters', { musicalNumberId: id, roleId }).catch(() => {})
+  }
+}
 
 const performerName = (id: number) => {
   const p = props.cast.find((m) => m.performerId === id)?.performer ?? props.performers.find((x) => x.id === id)
@@ -226,6 +247,22 @@ const castPerformers = computed(() =>
             </div>
             <StaffPicker v-else placeholder="Assign choreographer…" @select="setChoreographer($event.id)" />
           </label>
+
+          <!-- Featured characters -->
+          <div v-if="roles.length" class="space-y-1.5">
+            <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Featured characters</span>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="r in roles"
+                :key="r.id"
+                class="rounded-full border px-2 py-0.5 text-xs transition-colors"
+                :class="hasChar(r.id) ? 'border-primary bg-accent text-primary' : 'border-border text-muted-foreground hover:bg-accent'"
+                @click="toggleChar(r.id)"
+              >
+                {{ r.name }}
+              </button>
+            </div>
+          </div>
 
           <div v-for="bucket in castByGroup" :key="bucket.group?.id ?? 'ungrouped'">
             <h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

@@ -32,8 +32,10 @@ import type {
   CastMembership,
   MusicalNumber,
   NumberCast,
+  NumberCharacter,
   Performer,
   Role,
+  SceneCharacter,
 } from '@/types'
 
 const scope = useScopeStore()
@@ -46,6 +48,8 @@ const groups = ref<CastGroup[]>([])
 const roles = ref<Role[]>([])
 const numberCasts = ref<NumberCast[]>([])
 const performers = ref<Performer[]>([])
+const sceneChars = ref<SceneCharacter[]>([])
+const numberChars = ref<NumberCharacter[]>([])
 
 const selectedNumberId = ref<number | null>(null)
 const sideTab = ref<'cast' | 'groups' | 'roles'>('cast')
@@ -99,6 +103,8 @@ async function loadAll() {
     groups.value = []
     roles.value = []
     numberCasts.value = []
+    sceneChars.value = []
+    numberChars.value = []
     return
   }
   ;[
@@ -109,6 +115,8 @@ async function loadAll() {
     roles.value,
     numberCasts.value,
     performers.value,
+    sceneChars.value,
+    numberChars.value,
   ] = await Promise.all([
     safeGet<MusicalNumber>(`/numbers?productionId=${pid}`),
     safeGet<Act>(`/acts?productionId=${pid}`),
@@ -117,6 +125,8 @@ async function loadAll() {
     safeGet<Role>(`/roles?productionId=${pid}`),
     safeGet<NumberCast>(`/numbercast?productionId=${pid}`),
     safeGet<Performer>('/performers'),
+    safeGet<SceneCharacter>(`/scenecharacters?productionId=${pid}`),
+    safeGet<NumberCharacter>(`/numbercharacters?productionId=${pid}`),
   ])
   if (!numbers.value.some((n) => n.id === selectedNumberId.value))
     selectedNumberId.value = numbers.value[0]?.id ?? null
@@ -373,6 +383,12 @@ async function deleteGroup(group: CastGroup) {
   groups.value = groups.value.filter((g) => g.id !== group.id)
   for (const m of cast.value) if (m.castGroupId === group.id) m.castGroupId = null
 }
+
+/** How many scenes / numbers a character is linked to (shown in the cast list). */
+const roleAppearsIn = (roleId: number) => ({
+  scenes: sceneChars.value.filter((sc) => sc.roleId === roleId).length,
+  numbers: numberChars.value.filter((nc) => nc.roleId === roleId).length,
+})
 
 async function addRole() {
   const pid = scope.selectedProductionId
@@ -647,27 +663,35 @@ async function deleteRole(role: Role) {
               />
               <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent">Add</button>
             </form>
-            <p v-if="roles.length === 0" class="text-center text-xs text-muted-foreground">No roles yet.</p>
-            <ul class="space-y-1">
-              <li v-for="r in roles" :key="r.id" class="flex items-center gap-2 text-sm">
-                <span class="flex-1 truncate font-medium">{{ r.name }}</span>
-                <select
-                  class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
-                  :value="r.performerId ?? ''"
-                  @change="setRolePerformer(r, $event)"
-                >
-                  <option value="">Uncast</option>
-                  <option v-for="m in cast" :key="m.performerId" :value="m.performerId">
-                    {{ performerName(m.performerId) }}
-                  </option>
-                </select>
-                <button
-                  class="rounded p-1 text-muted-foreground hover:text-destructive"
-                  :aria-label="`Delete role ${r.name}`"
-                  @click="deleteRole(r)"
-                >
-                  <Trash2 class="h-3.5 w-3.5" />
-                </button>
+            <p v-if="roles.length === 0" class="text-center text-xs text-muted-foreground">No characters yet.</p>
+            <ul class="space-y-2">
+              <li v-for="r in roles" :key="r.id" class="space-y-0.5">
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="flex-1 truncate font-medium">{{ r.name }}</span>
+                  <select
+                    class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
+                    :value="r.performerId ?? ''"
+                    @change="setRolePerformer(r, $event)"
+                  >
+                    <option value="">Uncast</option>
+                    <option v-for="m in cast" :key="m.performerId" :value="m.performerId">
+                      {{ performerName(m.performerId) }}
+                    </option>
+                  </select>
+                  <button
+                    class="rounded p-1 text-muted-foreground hover:text-destructive"
+                    :aria-label="`Delete role ${r.name}`"
+                    @click="deleteRole(r)"
+                  >
+                    <Trash2 class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <p class="pl-0.5 text-xs text-muted-foreground">
+                  Appears in {{ roleAppearsIn(r.id).scenes }}
+                  {{ roleAppearsIn(r.id).scenes === 1 ? 'scene' : 'scenes' }} ·
+                  {{ roleAppearsIn(r.id).numbers }}
+                  {{ roleAppearsIn(r.id).numbers === 1 ? 'number' : 'numbers' }}
+                </p>
               </li>
             </ul>
           </div>

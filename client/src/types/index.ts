@@ -107,12 +107,37 @@ export interface MusicalNumber {
   costumeLabel?: string | null
   /** Null = not yet placed in the running order. */
   actId?: number | null
+  /** Which scene this number sits inside; null = not nested under a scene. */
+  sceneId?: number | null
   orderIndex: number
 }
 
 export interface NumberCast {
   musicalNumberId: number
   performerId: number
+}
+
+export interface Scene {
+  id: number
+  productionId: number
+  /** Which act this scene belongs to; null = not yet placed. */
+  actId?: number | null
+  name: string
+  setting?: string | null
+  notes?: string | null
+  orderIndex: number
+}
+
+/** A character (Role) present in a scene — the "who's in this scene" breakdown. */
+export interface SceneCharacter {
+  sceneId: number
+  roleId: number
+}
+
+/** A character (Role) featured in a number — additive tag over NumberCast. */
+export interface NumberCharacter {
+  musicalNumberId: number
+  roleId: number
 }
 
 export interface Formation {

@@ -8,6 +8,7 @@ import {
   Users,
   CalendarClock,
   ListOrdered,
+  Clapperboard,
   CalendarOff,
   CalendarRange,
   UserPlus,
@@ -35,6 +36,7 @@ const toggleDark = useToggle(isDark)
 const nav = [
   { to: '/', label: 'Planner', icon: Drama },
   { to: '/show-order', label: 'Show Order', icon: ListOrdered },
+  { to: '/script', label: 'Script', icon: Clapperboard },
   { to: '/rehearsals', label: 'Rehearsals', icon: CalendarClock },
   { to: '/conflicts', label: 'Conflicts', icon: CalendarOff },
   { to: '/performers', label: 'Performers', icon: Users },
