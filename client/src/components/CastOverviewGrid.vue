@@ -227,9 +227,10 @@ const quickChanges = computed(() => {
       {{ cast.length === 0 ? 'Add performers to the cast first (Plan view).' : 'Add numbers first (Plan view).' }}
     </p>
 
-    <template v-else>
-      <!-- The grid -->
-      <div class="min-h-0 flex-1 overflow-auto rounded-lg border border-border">
+    <!-- One scroll region: the tall grid dominates, summary panels flow below it.
+         Sticky headers/first column pin to this container while scrolling. -->
+    <div v-else class="min-h-0 flex-1 overflow-auto">
+      <div class="w-max rounded-lg border border-border">
         <table class="border-separate border-spacing-0 text-sm" @mouseleave="hoveredNumberId = null">
           <thead>
             <!-- Act headers -->
@@ -328,8 +329,8 @@ const quickChanges = computed(() => {
         </table>
       </div>
 
-      <!-- Below-grid panels -->
-      <div class="grid shrink-0 gap-3 text-sm md:grid-cols-2">
+      <!-- Summary panels — flow below the grid, pinned to the left as you scroll right -->
+      <div class="sticky left-0 mt-3 grid max-w-4xl gap-3 pb-1 text-sm md:grid-cols-2">
         <div v-if="notYetCast.length > 0" class="rounded-lg border border-border p-3">
           <h3 class="text-xs font-semibold uppercase tracking-wide text-destructive">Not yet cast ({{ notYetCast.length }})</h3>
           <p class="mt-1 text-xs text-muted-foreground">{{ notYetCast.map((m) => performerName(m.performerId)).join(', ') }}</p>
@@ -355,6 +356,6 @@ const quickChanges = computed(() => {
           </div>
         </div>
       </div>
-    </template>
+    </div>
   </div>
 </template>
