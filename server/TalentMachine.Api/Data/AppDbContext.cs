@@ -43,6 +43,9 @@ public class AppDbContext : DbContext
     public DbSet<CostumePiece> CostumePieces => Set<CostumePiece>();
     public DbSet<CostumeAssignment> CostumeAssignments => Set<CostumeAssignment>();
     public DbSet<Formation> Formations => Set<Formation>();
+    public DbSet<Scene> Scenes => Set<Scene>();
+    public DbSet<SceneCharacter> SceneCharacters => Set<SceneCharacter>();
+    public DbSet<NumberCharacter> NumberCharacters => Set<NumberCharacter>();
 
     /// <summary>Tenant used by the query filter; 0 (matches nothing) when unresolved.</summary>
     private int CurrentTenantId => _tenant.TenantId ?? 0;
@@ -77,6 +80,8 @@ public class AppDbContext : DbContext
         b.Entity<RehearsalAttendee>().HasKey(x => new { x.RehearsalId, x.PerformerId });
         b.Entity<RehearsalAttendance>().HasKey(x => new { x.RehearsalId, x.PerformerId });
         b.Entity<ProductionStaff>().HasKey(x => new { x.ProductionId, x.StaffMemberId, x.Role });
+        b.Entity<SceneCharacter>().HasKey(x => new { x.SceneId, x.RoleId });
+        b.Entity<NumberCharacter>().HasKey(x => new { x.MusicalNumberId, x.RoleId });
 
         // One Clerk user maps to exactly one membership.
         b.Entity<Membership>().HasIndex(x => x.ClerkUserId).IsUnique();
@@ -145,6 +150,10 @@ public class AppDbContext : DbContext
         b.Entity<MusicalNumber>()
             .HasOne(x => x.Choreographer).WithMany().HasForeignKey(x => x.ChoreographerStaffId)
             .OnDelete(DeleteBehavior.SetNull);
+        // Deleting a scene un-nests its numbers (keeps them and their act).
+        b.Entity<MusicalNumber>()
+            .HasOne(x => x.Scene).WithMany().HasForeignKey(x => x.SceneId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Creative-team assignments die with the show or the staff member.
         b.Entity<ProductionStaff>()
@@ -172,11 +181,30 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
         b.Entity<Formation>().Property(x => x.Coordinates).HasColumnType("jsonb");
 
+        // Deleting an act drops its scenes to "Unassigned", never deletes them.
+        b.Entity<Scene>()
+            .HasOne(x => x.Act).WithMany().HasForeignKey(x => x.ActId)
+            .OnDelete(DeleteBehavior.SetNull);
+        // Character presence rows die with their scene/number or the character.
+        b.Entity<SceneCharacter>()
+            .HasOne(x => x.Scene).WithMany().HasForeignKey(x => x.SceneId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<SceneCharacter>()
+            .HasOne(x => x.Role).WithMany().HasForeignKey(x => x.RoleId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<NumberCharacter>()
+            .HasOne(x => x.MusicalNumber).WithMany().HasForeignKey(x => x.MusicalNumberId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<NumberCharacter>()
+            .HasOne(x => x.Role).WithMany().HasForeignKey(x => x.RoleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Helpful lookup indexes.
         b.Entity<Conflict>().HasIndex(x => new { x.ProductionId, x.PerformerId });
         b.Entity<Rehearsal>().HasIndex(x => new { x.ProductionId, x.Date });
         b.Entity<Season>().HasIndex(x => new { x.TenantId, x.Year });
         b.Entity<MusicalNumber>().HasIndex(x => new { x.ProductionId, x.OrderIndex });
+        b.Entity<Scene>().HasIndex(x => new { x.ProductionId, x.OrderIndex });
 
         // Tenant isolation: every ITenantScoped entity gets a global query filter
         // (e.TenantId == current tenant) and a TenantId index. Defense-in-depth —

@@ -149,12 +149,13 @@ public class DemoSeeder : IHostedService
         }).ToList();
         db.CastMemberships.AddRange(memberships);
 
-        db.Roles.AddRange(
-            new Role { ProductionId = annie.Id, Name = "Annie", PerformerId = kids[0].Id, OrderIndex = 1 },
-            new Role { ProductionId = annie.Id, Name = "Miss Hannigan", PerformerId = kids[2].Id, OrderIndex = 2 },
-            new Role { ProductionId = annie.Id, Name = "Daddy Warbucks", PerformerId = kids[8].Id, OrderIndex = 3 },
-            new Role { ProductionId = annie.Id, Name = "Grace Farrell", PerformerId = kids[5].Id, OrderIndex = 4 },
-            new Role { ProductionId = annie.Id, Name = "Rooster", OrderIndex = 5 });
+        var roleAnnie = new Role { ProductionId = annie.Id, Name = "Annie", PerformerId = kids[0].Id, OrderIndex = 1 };
+        var roleHannigan = new Role { ProductionId = annie.Id, Name = "Miss Hannigan", PerformerId = kids[2].Id, OrderIndex = 2 };
+        var roleWarbucks = new Role { ProductionId = annie.Id, Name = "Daddy Warbucks", PerformerId = kids[8].Id, OrderIndex = 3 };
+        var roleGrace = new Role { ProductionId = annie.Id, Name = "Grace Farrell", PerformerId = kids[5].Id, OrderIndex = 4 };
+        var roleRooster = new Role { ProductionId = annie.Id, Name = "Rooster", OrderIndex = 5 };
+        var roleMolly = new Role { ProductionId = annie.Id, Name = "Molly", PerformerId = kids[9].Id, OrderIndex = 6 };
+        db.Roles.AddRange(roleAnnie, roleHannigan, roleWarbucks, roleGrace, roleRooster, roleMolly);
         await db.SaveChangesAsync();
 
         // --- Staff directory + creative team --------------------------------
@@ -219,6 +220,43 @@ public class DemoSeeder : IHostedService
         Cast(easyStreet, kids[2], kids[6], kids[13]);
         Cast(reprise, kids[0], kids[5], kids[8]);
         Cast(finale, kids.ToArray());
+        await db.SaveChangesAsync();
+
+        // --- Scenes (script breakdown) + character presence -----------------
+        var scOrphanage = new Scene { ProductionId = annie.Id, ActId = act1.Id, Name = "Scene 1", Setting = "The orphanage", OrderIndex = 1 };
+        var scStreet = new Scene { ProductionId = annie.Id, ActId = act1.Id, Name = "Scene 2", Setting = "St. Mark's Place, NYC", OrderIndex = 2 };
+        var scMansion = new Scene { ProductionId = annie.Id, ActId = act2.Id, Name = "Scene 1", Setting = "Warbucks mansion", OrderIndex = 1 };
+        db.Scenes.AddRange(scOrphanage, scStreet, scMansion);
+        await db.SaveChangesAsync();
+
+        // Nest numbers under their scenes.
+        maybe.SceneId = scOrphanage.Id;
+        hardKnock.SceneId = scOrphanage.Id;
+        littleGirls.SceneId = scOrphanage.Id;
+        tomorrow.SceneId = scStreet.Id;
+        nyc.SceneId = scMansion.Id;
+        easyStreet.SceneId = scMansion.Id;
+        await db.SaveChangesAsync();
+
+        // Who's in each scene (the book breakdown).
+        db.SceneCharacters.AddRange(
+            new SceneCharacter { SceneId = scOrphanage.Id, RoleId = roleAnnie.Id },
+            new SceneCharacter { SceneId = scOrphanage.Id, RoleId = roleMolly.Id },
+            new SceneCharacter { SceneId = scOrphanage.Id, RoleId = roleHannigan.Id },
+            new SceneCharacter { SceneId = scStreet.Id, RoleId = roleAnnie.Id },
+            new SceneCharacter { SceneId = scMansion.Id, RoleId = roleAnnie.Id },
+            new SceneCharacter { SceneId = scMansion.Id, RoleId = roleWarbucks.Id },
+            new SceneCharacter { SceneId = scMansion.Id, RoleId = roleGrace.Id },
+            new SceneCharacter { SceneId = scMansion.Id, RoleId = roleHannigan.Id },
+            new SceneCharacter { SceneId = scMansion.Id, RoleId = roleRooster.Id });
+
+        // A couple of featured-character tags on numbers.
+        db.NumberCharacters.AddRange(
+            new NumberCharacter { MusicalNumberId = maybe.Id, RoleId = roleAnnie.Id },
+            new NumberCharacter { MusicalNumberId = tomorrow.Id, RoleId = roleAnnie.Id },
+            new NumberCharacter { MusicalNumberId = littleGirls.Id, RoleId = roleHannigan.Id },
+            new NumberCharacter { MusicalNumberId = easyStreet.Id, RoleId = roleHannigan.Id },
+            new NumberCharacter { MusicalNumberId = easyStreet.Id, RoleId = roleRooster.Id });
         await db.SaveChangesAsync();
 
         // --- Costumes: pieces + a few sizes, incl. an on-stage extra ---------

@@ -19,8 +19,11 @@ public class MusicalNumber : ITenantScoped
     public string? CostumeLabel { get; set; }
     /// <summary>Which act this number belongs to; null = not yet in the running order.</summary>
     public int? ActId { get; set; }
+    /// <summary>Which scene this number sits inside; null = not nested under a scene.</summary>
+    public int? SceneId { get; set; }
     public int OrderIndex { get; set; }
 
     public Act? Act { get; set; }
+    public Scene? Scene { get; set; }
     public StaffMember? Choreographer { get; set; }
 }
