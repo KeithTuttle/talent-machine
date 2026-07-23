@@ -63,6 +63,11 @@ public class ScenesController : ControllerBase
     {
         var scene = await _db.FindScopedAsync<Scene>(id);
         if (scene is null || !_tenant.CanAccessProduction(scene.ProductionId)) return NotFound();
+        // Remove child rows explicitly — the in-memory demo provider doesn't
+        // enforce FK cascades, so prop cues would otherwise orphan onto a
+        // deleted scene (and show a "Scene #id" ghost in the props list).
+        _db.PropAssignments.RemoveRange(_db.PropAssignments.Where(a => a.SceneId == id));
+        _db.SceneCharacters.RemoveRange(_db.SceneCharacters.Where(sc => sc.SceneId == id));
         _db.Scenes.Remove(scene);
         await _db.SaveChangesAsync();
         return NoContent();

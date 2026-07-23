@@ -26,6 +26,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Script' },
   },
   {
+    path: '/props',
+    name: 'props',
+    component: () => import('@/views/PropsView.vue'),
+    meta: { title: 'Props' },
+  },
+  {
     path: '/rehearsals',
     name: 'rehearsals',
     component: () => import('@/views/RehearsalsView.vue'),

@@ -69,7 +69,8 @@ public class PropsPdfService
                     }
                     foreach (var scene in orderedScenes)
                     {
-                        var rows = assignmentsByScene[scene.Id].ToList();
+                        // Skip cues whose prop no longer exists (defensive against orphans).
+                        var rows = assignmentsByScene[scene.Id].Where(a => propById.ContainsKey(a.PropId)).ToList();
                         col.Item().Element(c => ComposeScene(c, scene, actName, rows, propById));
                     }
                 });

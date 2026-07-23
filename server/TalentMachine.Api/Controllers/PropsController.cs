@@ -64,6 +64,9 @@ public class PropsController : ControllerBase
     {
         var prop = await _db.FindScopedAsync<Prop>(id);
         if (prop is null || !_tenant.CanAccessProduction(prop.ProductionId)) return NotFound();
+        // Remove child cues explicitly — the in-memory demo provider doesn't
+        // enforce the FK cascade, and orphaned rows would surface in the PDF.
+        _db.PropAssignments.RemoveRange(_db.PropAssignments.Where(a => a.PropId == id));
         _db.Props.Remove(prop);
         await _db.SaveChangesAsync();
         return NoContent();

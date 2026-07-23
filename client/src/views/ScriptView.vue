@@ -10,6 +10,7 @@ import {
   CalendarPlus,
   Clapperboard,
   Music,
+  Package,
   Plus,
   Trash2,
   Users,
@@ -24,6 +25,8 @@ import type {
   MusicalNumber,
   NumberCast,
   Performer,
+  Prop,
+  PropAssignment,
   Role,
   Scene,
   SceneCharacter,
@@ -38,6 +41,8 @@ const roles = ref<Role[]>([])
 const performers = ref<Performer[]>([])
 const numberCasts = ref<NumberCast[]>([])
 const sceneChars = ref<SceneCharacter[]>([])
+const propList = ref<Prop[]>([])
+const propAssignments = ref<PropAssignment[]>([])
 
 async function safeGet<T>(url: string): Promise<T[]> {
   try {
@@ -58,6 +63,8 @@ async function loadAll() {
     performers.value = []
     numberCasts.value = []
     sceneChars.value = []
+    propList.value = []
+    propAssignments.value = []
     return
   }
   ;[
@@ -68,6 +75,8 @@ async function loadAll() {
     performers.value,
     numberCasts.value,
     sceneChars.value,
+    propList.value,
+    propAssignments.value,
   ] = await Promise.all([
     safeGet<Act>(`/acts?productionId=${pid}`),
     safeGet<Scene>(`/scenes?productionId=${pid}`),
@@ -76,6 +85,8 @@ async function loadAll() {
     safeGet<Performer>(`/performers`),
     safeGet<NumberCast>(`/numbercast?productionId=${pid}`),
     safeGet<SceneCharacter>(`/scenecharacters?productionId=${pid}`),
+    safeGet<Prop>(`/props?productionId=${pid}`),
+    safeGet<PropAssignment>(`/propassignments?productionId=${pid}`),
   ])
 }
 onMounted(loadAll)
@@ -225,6 +236,56 @@ async function addPresence(sceneId: number, e: Event) {
 async function removePresence(sceneId: number, roleId: number) {
   sceneChars.value = sceneChars.value.filter((sc) => !(sc.sceneId === sceneId && sc.roleId === roleId))
   await api.delete(`/scenecharacters?sceneId=${sceneId}&roleId=${roleId}`).catch(() => {})
+}
+
+// --- Props (per scene) -------------------------------------------------------
+
+const propById = computed(() => new Map(propList.value.map((p) => [p.id, p])))
+const propsInScene = (sceneId: number) =>
+  propAssignments.value
+    .filter((a) => a.sceneId === sceneId)
+    .map((a) => ({ assignment: a, prop: propById.value.get(a.propId) }))
+    .filter((x): x is { assignment: PropAssignment; prop: Prop } => !!x.prop)
+    .sort((a, b) => a.prop.name.localeCompare(b.prop.name))
+const propsNotInScene = (sceneId: number) => {
+  const used = new Set(propAssignments.value.filter((a) => a.sceneId === sceneId).map((a) => a.propId))
+  return propList.value.filter((p) => !used.has(p.id))
+}
+
+async function addPropToScene(sceneId: number, e: Event) {
+  const propId = Number((e.target as HTMLSelectElement).value)
+  ;(e.target as HTMLSelectElement).value = ''
+  if (!propId) return
+  const { data } = await api.post<PropAssignment>('/propassignments', { id: 0, propId, sceneId })
+  propAssignments.value.push(data)
+}
+
+async function createPropInScene(sceneId: number, e: Event) {
+  const input = e.target as HTMLInputElement
+  const name = input.value.trim()
+  const pid = scope.selectedProductionId
+  if (!name || pid === null) return
+  input.value = ''
+  const { data: prop } = await api.post<Prop>('/props', {
+    id: 0,
+    productionId: pid,
+    name,
+    quantity: 1,
+    status: 'Needed',
+    orderIndex: propList.value.length + 1,
+  })
+  propList.value.push(prop)
+  const { data: a } = await api.post<PropAssignment>('/propassignments', {
+    id: 0,
+    propId: prop.id,
+    sceneId,
+  })
+  propAssignments.value.push(a)
+}
+
+async function removePropFromScene(assignment: PropAssignment) {
+  propAssignments.value = propAssignments.value.filter((x) => x.id !== assignment.id)
+  await api.delete(`/propassignments/${assignment.id}`).catch(() => {})
 }
 
 // --- Schedule blocking -------------------------------------------------------
@@ -434,6 +495,45 @@ async function scheduleBlocking(scene: Scene) {
                   <option v-for="s in scenesInAct(section.act?.id ?? null)" :key="s.id" :value="s.id">{{ s.name }}</option>
                 </select>
               </div>
+            </div>
+
+            <!-- Props -->
+            <div class="space-y-1.5">
+              <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Props</span>
+              <div class="flex flex-wrap items-center gap-1">
+                <span
+                  v-for="{ assignment, prop } in propsInScene(scene.id)"
+                  :key="assignment.id"
+                  class="flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-xs"
+                >
+                  <Package class="h-3 w-3 text-muted-foreground" />
+                  {{ prop.name }}
+                  <span v-if="prop.quantity > 1" class="text-muted-foreground">×{{ prop.quantity }}</span>
+                  <button
+                    class="text-muted-foreground hover:text-destructive"
+                    :aria-label="`Remove ${prop.name}`"
+                    @click="removePropFromScene(assignment)"
+                  >
+                    <X class="h-3 w-3" />
+                  </button>
+                </span>
+                <select
+                  v-if="propsNotInScene(scene.id).length"
+                  class="rounded-md border border-dashed border-border bg-transparent px-2 py-0.5 text-xs text-muted-foreground focus:outline-none"
+                  :value="''"
+                  @change="addPropToScene(scene.id, $event)"
+                >
+                  <option value="">+ Add prop</option>
+                  <option v-for="p in propsNotInScene(scene.id)" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+                <input
+                  placeholder="+ new prop"
+                  class="w-24 rounded-md border border-dashed border-border bg-transparent px-2 py-0.5 text-xs focus:w-40 focus:outline-none"
+                  @keydown.enter.prevent="createPropInScene(scene.id, $event)"
+                  @blur="createPropInScene(scene.id, $event)"
+                />
+              </div>
+              <p class="text-[11px] text-muted-foreground">Preset, handler &amp; strike details live on the <RouterLink to="/props" class="underline hover:text-foreground">Props</RouterLink> page.</p>
             </div>
 
             <!-- Who's needed + schedule -->

@@ -140,6 +140,33 @@ export interface NumberCharacter {
   roleId: number
 }
 
+export type PropStatus = 'Needed' | 'Sourced' | 'Ready'
+export const PROP_STATUSES: PropStatus[] = ['Needed', 'Sourced', 'Ready']
+
+/** A production's prop-catalog entry (reusable across scenes). */
+export interface Prop {
+  id: number
+  productionId: number
+  name: string
+  description?: string | null
+  quantity: number
+  storageLocation?: string | null
+  status: PropStatus
+  notes?: string | null
+  orderIndex: number
+}
+
+/** A prop's use in one scene: preset, handler, strike-to, notes. */
+export interface PropAssignment {
+  id: number
+  propId: number
+  sceneId: number
+  presetLocation?: string | null
+  handler?: string | null
+  strikeTo?: string | null
+  notes?: string | null
+}
+
 // Dashboard aggregate (mirrors DashboardController's DTO records).
 export interface DashboardCountdown {
   openingDate?: string | null
