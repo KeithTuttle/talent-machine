@@ -57,3 +57,11 @@ public enum CostumeGender
     Boys,
     Girls,
 }
+
+/// <summary>Where a prop is in the gathering process. Default = Needed.</summary>
+public enum PropStatus
+{
+    Needed,
+    Sourced,
+    Ready,
+}

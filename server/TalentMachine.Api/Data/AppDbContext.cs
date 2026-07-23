@@ -46,6 +46,8 @@ public class AppDbContext : DbContext
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<SceneCharacter> SceneCharacters => Set<SceneCharacter>();
     public DbSet<NumberCharacter> NumberCharacters => Set<NumberCharacter>();
+    public DbSet<Prop> Props => Set<Prop>();
+    public DbSet<PropAssignment> PropAssignments => Set<PropAssignment>();
 
     /// <summary>Tenant used by the query filter; 0 (matches nothing) when unresolved.</summary>
     private int CurrentTenantId => _tenant.TenantId ?? 0;
@@ -72,6 +74,7 @@ public class AppDbContext : DbContext
         b.Entity<ProductionStaff>().Property(x => x.Role).HasConversion<string>();
         b.Entity<MusicalNumber>().Property(x => x.TeachStatus).HasConversion<string>();
         b.Entity<CostumePiece>().Property(x => x.Gender).HasConversion<string>();
+        b.Entity<Prop>().Property(x => x.Status).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
         b.Entity<NumberCast>().HasKey(x => new { x.MusicalNumberId, x.PerformerId });
@@ -199,12 +202,21 @@ public class AppDbContext : DbContext
             .HasOne(x => x.Role).WithMany().HasForeignKey(x => x.RoleId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Props: assignments die with their prop or their scene.
+        b.Entity<PropAssignment>()
+            .HasOne(x => x.Prop).WithMany().HasForeignKey(x => x.PropId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<PropAssignment>()
+            .HasOne(x => x.Scene).WithMany().HasForeignKey(x => x.SceneId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Helpful lookup indexes.
         b.Entity<Conflict>().HasIndex(x => new { x.ProductionId, x.PerformerId });
         b.Entity<Rehearsal>().HasIndex(x => new { x.ProductionId, x.Date });
         b.Entity<Season>().HasIndex(x => new { x.TenantId, x.Year });
         b.Entity<MusicalNumber>().HasIndex(x => new { x.ProductionId, x.OrderIndex });
         b.Entity<Scene>().HasIndex(x => new { x.ProductionId, x.OrderIndex });
+        b.Entity<Prop>().HasIndex(x => new { x.ProductionId, x.OrderIndex });
 
         // Tenant isolation: every ITenantScoped entity gets a global query filter
         // (e.TenantId == current tenant) and a TenantId index. Defense-in-depth —

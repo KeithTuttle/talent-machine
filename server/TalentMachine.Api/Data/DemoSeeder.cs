@@ -259,6 +259,26 @@ public class DemoSeeder : IHostedService
             new NumberCharacter { MusicalNumberId = easyStreet.Id, RoleId = roleRooster.Id });
         await db.SaveChangesAsync();
 
+        // --- Props: catalog + per-scene cues -------------------------------
+        var brushes = new Prop { ProductionId = annie.Id, Name = "Scrub brushes", Quantity = 6, StorageLocation = "Prop bin A", Status = PropStatus.Ready, OrderIndex = 1 };
+        var buckets = new Prop { ProductionId = annie.Id, Name = "Buckets", Description = "Galvanized, aged", Quantity = 4, StorageLocation = "Prop bin A", Status = PropStatus.Sourced, OrderIndex = 2 };
+        var mop = new Prop { ProductionId = annie.Id, Name = "Rag mop", Quantity = 1, StorageLocation = "Against SR wall", Status = PropStatus.Ready, OrderIndex = 3 };
+        var locket = new Prop { ProductionId = annie.Id, Name = "Annie's locket", Description = "Silver, on a chain", Quantity = 1, StorageLocation = "Locked valuables box", Status = PropStatus.Ready, Notes = "Hero prop — do not lose!", OrderIndex = 4 };
+        var newspaper = new Prop { ProductionId = annie.Id, Name = "Newspaper", Description = "1930s front page", Quantity = 3, StorageLocation = "SL bench", Status = PropStatus.Needed, OrderIndex = 5 };
+        var radio = new Prop { ProductionId = annie.Id, Name = "Console radio", Description = "Period cabinet radio (non-working)", Quantity = 1, StorageLocation = "SR shelf", Status = PropStatus.Sourced, OrderIndex = 6 };
+        db.Props.AddRange(brushes, buckets, mop, locket, newspaper, radio);
+        await db.SaveChangesAsync();
+
+        db.PropAssignments.AddRange(
+            new PropAssignment { PropId = brushes.Id, SceneId = scOrphanage.Id, PresetLocation = "SR prop table", Handler = "Orphans (preset)", StrikeTo = "Back to bin A" },
+            new PropAssignment { PropId = buckets.Id, SceneId = scOrphanage.Id, PresetLocation = "SR prop table", Handler = "Orphans", StrikeTo = "Carried off SL" },
+            new PropAssignment { PropId = mop.Id, SceneId = scOrphanage.Id, PresetLocation = "Against SR wall", Handler = "Molly", Notes = "Used in the scrubbing number" },
+            new PropAssignment { PropId = locket.Id, SceneId = scOrphanage.Id, PresetLocation = "Worn by Annie", Handler = "Annie (worn)", Notes = "Never leaves her neck" },
+            new PropAssignment { PropId = locket.Id, SceneId = scMansion.Id, PresetLocation = "Worn by Annie", Handler = "Annie (worn)" },
+            new PropAssignment { PropId = newspaper.Id, SceneId = scStreet.Id, PresetLocation = "SL bench", Handler = "Ensemble" },
+            new PropAssignment { PropId = radio.Id, SceneId = scMansion.Id, PresetLocation = "On the desk", Handler = "Preset", StrikeTo = "Leave on desk" });
+        await db.SaveChangesAsync();
+
         // --- Costumes: pieces + a few sizes, incl. an on-stage extra ---------
         db.CostumePieces.AddRange(
             new CostumePiece { MusicalNumberId = hardKnock.Id, Gender = CostumeGender.All, Description = "Gray orphan smock", Accessories = "Rope belt", Shoes = "Scuffed black flats" },
