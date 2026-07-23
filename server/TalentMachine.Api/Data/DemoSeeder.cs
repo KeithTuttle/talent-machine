@@ -348,6 +348,13 @@ public class DemoSeeder : IHostedService
         var nextMusic = R(thisSaturday, 9, 10, RehearsalType.Music, nyc);
         var nextDance = R(thisSaturday, 10, 12, RehearsalType.Dance, nyc, "Full company — spacing on the big platform");
         var nextBlock = R(thisSunday, 13, 15, RehearsalType.Blocking, easyStreet);
+        // Rooms — a small growing list the UI offers as suggestions.
+        pastMusic.Room = "Studio A";
+        pastDance.Room = "Studio A";
+        pastRun.Room = "Main Stage";
+        nextMusic.Room = "Studio B";
+        nextDance.Room = "Main Stage";
+        nextBlock.Room = "Studio A";
         db.Rehearsals.AddRange(pastMusic, pastDance, pastRun, nextMusic, nextDance, nextBlock);
         await db.SaveChangesAsync();
 

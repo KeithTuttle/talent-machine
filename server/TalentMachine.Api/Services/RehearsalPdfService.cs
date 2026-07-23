@@ -126,6 +126,8 @@ public class RehearsalPdfService
                         {
                             txt.Span(title).SemiBold().FontColor(Colors.Black);
                             txt.Span($"   {slot.Type}").FontSize(9).FontColor(Colors.Grey.Medium);
+                            if (!string.IsNullOrWhiteSpace(slot.Room))
+                                txt.Span($"   •  {slot.Room}").FontSize(9).FontColor(Colors.Grey.Darken1);
                         });
                         if (attendees.Count > 0)
                         {

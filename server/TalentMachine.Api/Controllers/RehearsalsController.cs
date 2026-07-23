@@ -26,7 +26,10 @@ public class RehearsalsController : ControllerBase
     public record BulkRequest(int ProductionId, List<Rehearsal> Rehearsals);
     public record SuggestRequest(int ProductionId, string? Prompt, DateOnly FromDate, DateOnly ToDate);
     public record SuggestResponse(bool Configured, bool Ok, List<SuggestedSlot> Slots);
-    public record EmailRequest(int ProductionId, DateOnly From, DateOnly To, string Audience);
+    // Subject/Body are optional overrides: when the user edits the preview, send
+    // exactly what they typed (recipients + PDF are still resolved server-side).
+    public record EmailRequest(int ProductionId, DateOnly From, DateOnly To, string Audience,
+        string? Subject = null, string? Body = null);
     public record EmailPreview(bool Configured, string Subject, string Body, List<string> Recipients, List<string> MissingEmail);
     public record EmailResult(bool Sent, int Count);
 
@@ -194,7 +197,10 @@ public class RehearsalsController : ControllerBase
         if (built.Value.Recipients.Count == 0) return new EmailResult(false, 0);
 
         var bytes = pdf.Build(built.Value.PdfData);
-        var sent = await email.SendAsync(built.Value.Recipients, built.Value.Subject, built.Value.Body,
+        // Honor edits from the preview; fall back to the composed defaults.
+        var subject = string.IsNullOrWhiteSpace(input.Subject) ? built.Value.Subject : input.Subject!;
+        var body = string.IsNullOrWhiteSpace(input.Body) ? built.Value.Body : input.Body!;
+        var sent = await email.SendAsync(built.Value.Recipients, subject, body,
             bytes, $"rehearsals-{input.From:yyyy-MM-dd}.pdf");
         return new EmailResult(sent, sent ? built.Value.Recipients.Count : 0);
     }
@@ -252,9 +258,11 @@ public class RehearsalsController : ControllerBase
         var missing = performers.Where(p => !withEmail.Contains(p.Id))
             .Select(p => $"{p.FirstName} {p.LastName}".Trim()).OrderBy(n => n).ToList();
 
+        var allPerformers = await _db.Performers.ToListAsync();
+        var nameById = allPerformers.ToDictionary(p => p.Id, p => $"{p.FirstName} {p.LastName}".Trim());
         var numberTitle = numbers.ToDictionary(n => n.Id, n => n.Title);
         var subject = $"Rehearsal schedule: {production.Title} — {input.From:MMM d}–{input.To:MMM d, yyyy}";
-        var body = ComposeBody(production.Title, input.From, input.To, slots, numberTitle);
+        var body = ComposeBody(production.Title, input.From, input.To, slots, numberTitle, castByNumber, overrides, nameById);
 
         var pdfData = new RehearsalPdfData
         {
@@ -265,7 +273,7 @@ public class RehearsalsController : ControllerBase
             Overrides = overrides,
             NumberCasts = numberCasts,
             Numbers = numbers,
-            Performers = await _db.Performers.ToListAsync(),
+            Performers = allPerformers,
             Conflicts = await _db.Conflicts.Where(c => c.ProductionId == input.ProductionId).ToListAsync(),
         };
 
@@ -273,15 +281,23 @@ public class RehearsalsController : ControllerBase
     }
 
     private static string ComposeBody(
-        string title, DateOnly from, DateOnly to, List<Rehearsal> slots, Dictionary<int, string> numberTitle)
+        string title, DateOnly from, DateOnly to, List<Rehearsal> slots,
+        Dictionary<int, string> numberTitle, ILookup<int, int> castByNumber,
+        List<RehearsalAttendee> overrides, Dictionary<int, string> nameById)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"Rehearsal schedule — {title}");
+        sb.AppendLine("REHEARSAL SCHEDULE");
+        sb.AppendLine(title);
         sb.AppendLine($"{from:MMM d} – {to:MMM d, yyyy}");
         sb.AppendLine();
+        sb.AppendLine("Please check the call times below. Under each rehearsal are the");
+        sb.AppendLine("performers needed for it — if your performer isn't listed, they're");
+        sb.AppendLine("not called for that slot.");
+        sb.AppendLine();
+
         if (slots.Count == 0)
         {
-            sb.AppendLine("No rehearsals scheduled for this week.");
+            sb.AppendLine("No rehearsals are scheduled for this week.");
         }
         else
         {
@@ -291,16 +307,28 @@ public class RehearsalsController : ControllerBase
                 if (s.Date != day)
                 {
                     day = s.Date;
-                    sb.AppendLine(s.Date.ToString("dddd, MMMM d"));
+                    sb.AppendLine(s.Date.ToString("dddd, MMMM d").ToUpperInvariant());
+                    sb.AppendLine(new string('-', 34));
                 }
-                var name = s.MusicalNumberId is int nid && numberTitle.TryGetValue(nid, out var t) ? t : "General";
-                var line = $"  {s.StartTime:h:mm tt}–{s.EndTime:h:mm tt}  {name} ({s.Type})";
-                if (!string.IsNullOrWhiteSpace(s.Notes)) line += $" — {s.Notes}";
-                sb.AppendLine(line);
+
+                var name = s.MusicalNumberId is int nid && numberTitle.TryGetValue(nid, out var t)
+                    ? t : "General / all-company";
+                sb.AppendLine($"  {s.StartTime:h:mm tt} – {s.EndTime:h:mm tt}   {name}  ({s.Type})");
+                if (!string.IsNullOrWhiteSpace(s.Room)) sb.AppendLine($"      Room: {s.Room}");
+                if (!string.IsNullOrWhiteSpace(s.Notes)) sb.AppendLine($"      Note: {s.Notes}");
+
+                var needed = RehearsalResolver.ResolveAttendees(s, castByNumber, overrides)
+                    .Select(id => nameById.GetValueOrDefault(id, $"#{id}"))
+                    .OrderBy(n => n)
+                    .ToList();
+                sb.AppendLine(needed.Count == 0
+                    ? "      Needed: (no cast assigned yet)"
+                    : $"      Needed ({needed.Count}): {string.Join(", ", needed)}");
+                sb.AppendLine();
             }
         }
-        sb.AppendLine();
-        sb.AppendLine("The full schedule is attached as a PDF.");
+
+        sb.AppendLine("The full schedule is also attached as a PDF.");
         sb.AppendLine();
         sb.AppendLine("See you there!");
         sb.AppendLine("— The Talent Machine Company");

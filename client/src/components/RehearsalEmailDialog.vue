@@ -35,6 +35,9 @@ const audience = ref<'all' | 'scheduled'>('all')
 const preview = ref<Preview | null>(null)
 const loading = ref(false)
 const sending = ref(false)
+// Editable copies — the user can tweak before sending; these are what actually go out.
+const editSubject = ref('')
+const editBody = ref('')
 
 async function loadPreview() {
   loading.value = true
@@ -47,6 +50,8 @@ async function loadPreview() {
       audience: audience.value,
     })
     preview.value = data
+    editSubject.value = data.subject
+    editBody.value = data.body
   } catch {
     preview.value = null
   } finally {
@@ -72,6 +77,8 @@ async function send() {
       from: props.from,
       to: props.to,
       audience: audience.value,
+      subject: editSubject.value,
+      body: editBody.value,
     })
     if (data.sent) {
       toast.success(`Schedule emailed to ${data.count} guardian${data.count === 1 ? '' : 's'}`)
@@ -94,9 +101,9 @@ async function send() {
       >
         <DialogTitle class="text-base font-semibold">Email the schedule</DialogTitle>
         <DialogDescription class="mt-1.5 text-sm text-muted-foreground">
-          This is exactly what will be sent — the schedule PDF is attached, and
-          recipients are BCC'd so families don't see each other's addresses. Nothing
-          sends until you click Send.
+          This is exactly what will be sent — edit the subject or message below if you
+          like. The schedule PDF is attached, recipients are BCC'd so families don't see
+          each other's addresses, and nothing sends until you click Send.
         </DialogDescription>
 
         <div class="mt-4 flex rounded-md border border-border text-sm">
@@ -122,11 +129,19 @@ async function send() {
           </p>
 
           <div class="rounded-md border border-border">
-            <div class="border-b border-border px-3 py-2 text-sm">
-              <span class="text-xs font-medium text-muted-foreground">Subject:</span>
-              {{ preview.subject }}
-            </div>
-            <pre class="max-h-56 overflow-y-auto whitespace-pre-wrap px-3 py-2 font-sans text-xs leading-relaxed text-foreground">{{ preview.body }}</pre>
+            <label class="flex items-center gap-2 border-b border-border px-3 py-2 text-sm">
+              <span class="text-xs font-medium text-muted-foreground">Subject</span>
+              <input
+                v-model="editSubject"
+                class="min-w-0 flex-1 rounded-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </label>
+            <textarea
+              v-model="editBody"
+              rows="12"
+              class="block max-h-72 w-full resize-y overflow-y-auto whitespace-pre-wrap bg-transparent px-3 py-2 font-sans text-xs leading-relaxed text-foreground focus:outline-none"
+              spellcheck="true"
+            />
             <div class="border-t border-border px-3 py-2 text-xs text-muted-foreground">
               📎 rehearsals-{{ from }}.pdf
             </div>

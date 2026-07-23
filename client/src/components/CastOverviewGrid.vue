@@ -251,8 +251,8 @@ const quickChanges = computed(() => {
               <th
                 v-for="n in allColumns"
                 :key="n.id"
-                class="sticky z-20 border-b border-r border-border px-1 pb-2 pt-3 align-bottom"
-                :class="[hasActHeaders ? 'top-[25px]' : 'top-0', hoveredNumberId === n.id ? 'bg-primary/10' : 'bg-background']"
+                class="sticky z-20 border-b border-r border-border bg-background px-1 pb-2 pt-3 align-bottom"
+                :class="[hasActHeaders ? 'top-[25px]' : 'top-0', hoveredNumberId === n.id ? 'shadow-[inset_0_0_0_9999px_hsl(var(--primary)/0.1)]' : '']"
                 @mouseenter="hoveredNumberId = n.id"
               >
                 <button class="mx-auto flex flex-col items-center gap-1" :title="`Open ${n.title}`" @click="emit('openNumber', n)">

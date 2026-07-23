@@ -293,6 +293,8 @@ export interface Rehearsal {
   type: RehearsalType
   /** Null = general session; attendees come only from explicit overrides. */
   musicalNumberId?: number | null
+  /** Where the slot happens ("Studio A"); free text with a growing suggestion list. */
+  room?: string | null
   notes?: string | null
 }
 

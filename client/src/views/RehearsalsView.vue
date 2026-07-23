@@ -9,6 +9,7 @@ import {
   ChevronUp,
   FileDown,
   Mail,
+  MapPin,
   Plus,
   Sparkles,
   Trash2,
@@ -157,6 +158,15 @@ const formEnd = ref('11:00')
 const formType = ref<RehearsalType>('Dance')
 const formNumberId = ref<number | null>(null)
 const formNotes = ref('')
+const formRoom = ref('')
+
+/** Distinct rooms used so far — the suggestion list that grows as slots are added. */
+const rooms = computed(() =>
+  [...new Set(slots.value.map((s) => s.room?.trim()).filter((r): r is string => !!r))].sort(),
+)
+
+/** The API's TimeOnly binder needs HH:mm:ss; <input type="time"> yields HH:mm. */
+const withSeconds = (t: string) => (t && t.split(':').length === 2 ? `${t}:00` : t)
 
 const addWarnings = computed(() => {
   if (!formDate.value) return []
@@ -180,10 +190,11 @@ async function addSlot() {
     id: 0,
     productionId: pid,
     date: formDate.value,
-    startTime: formStart.value,
-    endTime: formEnd.value,
+    startTime: withSeconds(formStart.value),
+    endTime: withSeconds(formEnd.value),
     type: formType.value,
     musicalNumberId: formNumberId.value,
+    room: formRoom.value.trim() || null,
     notes: formNotes.value.trim() || null,
   })
   slots.value.push(data)
@@ -192,7 +203,12 @@ async function addSlot() {
 }
 
 async function saveSlot(s: Rehearsal) {
-  await api.put(`/rehearsals/${s.id}`, s)
+  // Normalize the time-input values (HH:mm) to what the API's TimeOnly binder wants.
+  await api.put(`/rehearsals/${s.id}`, {
+    ...s,
+    startTime: withSeconds(s.startTime),
+    endTime: withSeconds(s.endTime),
+  })
   toast.success('Saved')
 }
 
@@ -494,12 +510,18 @@ const slotsOnDate = (iso: string) =>
           <option :value="null">General (pick kids manually)</option>
           <option v-for="n in numbers" :key="n.id" :value="n.id">{{ n.title }}</option>
         </select>
+        <input v-model="formRoom" list="room-suggestions" placeholder="Room" class="min-w-28 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none" />
         <input v-model="formNotes" placeholder="Notes" class="min-w-32 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none" />
         <button type="submit" class="rounded-md bg-primary px-3 py-1 text-sm font-medium text-primary-foreground hover:opacity-90">Add</button>
         <p v-if="addWarnings.length > 0" class="flex w-full items-center gap-1 text-xs text-orange-600 dark:text-orange-400">
           <AlertTriangle class="h-3.5 w-3.5" /> Conflict that day: {{ addWarnings.join(', ') }}
         </p>
       </form>
+
+      <!-- Shared room suggestions (grows as rooms are used). -->
+      <datalist id="room-suggestions">
+        <option v-for="r in rooms" :key="r" :value="r" />
+      </datalist>
 
       <!-- ============ List lens ============ -->
       <div v-if="lens === 'list'" class="space-y-4">
@@ -518,6 +540,9 @@ const slotsOnDate = (iso: string) =>
                 {{ s.type }}
               </span>
               <span class="flex-1 truncate font-medium">{{ numberTitle(s.musicalNumberId) }}</span>
+              <span v-if="s.room" class="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <MapPin class="h-3 w-3" /> {{ s.room }}
+              </span>
               <span v-if="warningsOf(s).length > 0" class="flex items-center gap-1 text-xs font-medium text-orange-600 dark:text-orange-400">
                 <AlertTriangle class="h-3.5 w-3.5" /> {{ warningsOf(s).length }}
               </span>
@@ -552,6 +577,7 @@ const slotsOnDate = (iso: string) =>
                   <option :value="null">General</option>
                   <option v-for="n in numbers" :key="n.id" :value="n.id">{{ n.title }}</option>
                 </select>
+                <input v-model="s.room" list="room-suggestions" placeholder="Room" class="min-w-24 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveSlot(s)" />
                 <input v-model="s.notes" placeholder="Notes" class="min-w-28 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveSlot(s)" />
               </div>
               <div class="flex flex-wrap gap-1.5">

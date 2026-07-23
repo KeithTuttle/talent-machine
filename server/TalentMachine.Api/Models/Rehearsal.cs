@@ -18,6 +18,9 @@ public class Rehearsal : ITenantScoped
     /// <summary>Null = general session (run-through, notes, etc.) — attendees are
     /// then only the explicitly added ones.</summary>
     public int? MusicalNumberId { get; set; }
+    /// <summary>Where the slot happens ("Studio A", "Main stage"); free text so the
+    /// list of rooms grows naturally as slots are scheduled.</summary>
+    public string? Room { get; set; }
     public string? Notes { get; set; }
 
     public Production? Production { get; set; }
