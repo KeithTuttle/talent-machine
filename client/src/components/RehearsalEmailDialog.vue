@@ -29,6 +29,9 @@ interface Preview {
   body: string
   recipients: string[]
   missingEmail: string[]
+  /** Performers this audience covers, and the full cast size (for context). */
+  audienceCount: number
+  castCount: number
 }
 
 const audience = ref<'all' | 'scheduled'>('all')
@@ -147,9 +150,18 @@ async function send() {
             </div>
           </div>
 
-          <p class="text-sm">
-            <span class="font-medium">{{ preview.recipients.length }}</span>
-            guardian email{{ preview.recipients.length === 1 ? '' : 's' }} (BCC)
+          <p class="text-sm text-muted-foreground">
+            Calls <span class="font-medium text-foreground">{{ preview.audienceCount }}</span>
+            of {{ preview.castCount }} performers →
+            <span class="font-medium text-foreground">{{ preview.recipients.length }}</span>
+            guardian email{{ preview.recipients.length === 1 ? '' : 's' }} (BCC).
+          </p>
+          <p
+            v-if="audience === 'scheduled' && preview.audienceCount === preview.castCount && preview.castCount > 0"
+            class="rounded-md bg-muted p-2 text-xs text-muted-foreground"
+          >
+            Every performer is called this week (there's an all-company rehearsal), so this
+            reaches the same families as “All guardians.”
           </p>
           <p v-if="preview.recipients.length > 0" class="max-h-20 overflow-y-auto break-all rounded-md border border-border p-2 text-xs text-muted-foreground">
             {{ preview.recipients.join(', ') }}

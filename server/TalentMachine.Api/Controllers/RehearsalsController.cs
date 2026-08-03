@@ -30,7 +30,8 @@ public class RehearsalsController : ControllerBase
     // exactly what they typed (recipients + PDF are still resolved server-side).
     public record EmailRequest(int ProductionId, DateOnly From, DateOnly To, string Audience,
         string? Subject = null, string? Body = null);
-    public record EmailPreview(bool Configured, string Subject, string Body, List<string> Recipients, List<string> MissingEmail);
+    public record EmailPreview(bool Configured, string Subject, string Body, List<string> Recipients,
+        List<string> MissingEmail, int AudienceCount, int CastCount);
     public record EmailResult(bool Sent, int Count);
 
     // GET /api/rehearsals?productionId=&from=&to=
@@ -181,7 +182,7 @@ public class RehearsalsController : ControllerBase
         var built = await BuildEmailAsync(input);
         if (built is null) return NotFound();
         return new EmailPreview(email.IsConfigured, built.Value.Subject, built.Value.Body,
-            built.Value.Recipients, built.Value.Missing);
+            built.Value.Recipients, built.Value.Missing, built.Value.AudienceCount, built.Value.CastCount);
     }
 
     // POST /api/rehearsals/email/send — send the schedule (PDF attached) to the
@@ -206,7 +207,8 @@ public class RehearsalsController : ControllerBase
     }
 
     private readonly record struct BuiltEmail(
-        string Subject, string Body, List<string> Recipients, List<string> Missing, RehearsalPdfData PdfData);
+        string Subject, string Body, List<string> Recipients, List<string> Missing,
+        int AudienceCount, int CastCount, RehearsalPdfData PdfData);
 
     /// <summary>Resolves recipients + composes the body once, shared by preview and send.</summary>
     private async Task<BuiltEmail?> BuildEmailAsync(EmailRequest input)
@@ -224,6 +226,11 @@ public class RehearsalsController : ControllerBase
         var overrides = await _db.RehearsalAttendees.Where(a => slotIds.Contains(a.RehearsalId)).ToListAsync();
         var castByNumber = numberCasts.ToLookup(c => c.MusicalNumberId, c => c.PerformerId);
 
+        // Full production cast (also the "all" audience).
+        var castIds = (await _db.CastMemberships
+            .Where(m => m.ProductionId == input.ProductionId).Select(m => m.PerformerId).ToListAsync())
+            .ToHashSet();
+
         // Audience performers: whole cast, or only kids scheduled this week.
         HashSet<int> audienceIds;
         if (input.Audience == "scheduled")
@@ -235,9 +242,7 @@ public class RehearsalsController : ControllerBase
         }
         else
         {
-            audienceIds = (await _db.CastMemberships
-                .Where(m => m.ProductionId == input.ProductionId).Select(m => m.PerformerId).ToListAsync())
-                .ToHashSet();
+            audienceIds = castIds;
         }
 
         var performers = await _db.Performers.Where(p => audienceIds.Contains(p.Id)).ToListAsync();
@@ -277,7 +282,7 @@ public class RehearsalsController : ControllerBase
             Conflicts = await _db.Conflicts.Where(c => c.ProductionId == input.ProductionId).ToListAsync(),
         };
 
-        return new BuiltEmail(subject, body, recipients, missing, pdfData);
+        return new BuiltEmail(subject, body, recipients, missing, audienceIds.Count, castIds.Count, pdfData);
     }
 
     private static string ComposeBody(
