@@ -237,7 +237,7 @@ const openingDate = computed(() => scope.selectedProduction?.openingDate)
           class="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent"
           @click="importOpen = true"
         >
-          <Upload class="h-4 w-4" /> Import CSV
+          <Upload class="h-4 w-4" /> Import CSV/Excel
         </button>
       </div>
 
@@ -443,6 +443,7 @@ const openingDate = computed(() => scope.selectedProduction?.openingDate)
       </div>
 
       <CsvImportDialog
+        :existing="conflicts"
         :open="importOpen"
         :production-id="scope.selectedProductionId"
         :cast="cast"
