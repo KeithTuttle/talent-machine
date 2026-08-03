@@ -8,10 +8,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from 'reka-ui'
-import { CheckCircle2, AlertTriangle, Copy } from 'lucide-vue-next'
+import { CheckCircle2, AlertTriangle, Copy, Sparkles, Loader2 } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { conflictLabel } from '@/lib/conflicts'
+import type { AiImportResult } from '@/types'
 import {
   sheetToRows,
   looksLikeHeader,
@@ -41,6 +42,7 @@ const hasHeader = ref(true)
 const mapping = ref<ColumnMap>({ name: null, start: null, end: null, reason: null, weekday: null })
 const reviewRows = ref<ReviewRow[]>([])
 const importing = ref(false)
+const aiLoading = ref(false)
 
 const TEMPLATE =
   'Name,Start date,End date,Reason,Weekday\n' +
@@ -106,6 +108,42 @@ function onMappingChange(field: keyof ColumnMap, e: Event) {
   const v = (e.target as HTMLSelectElement).value
   mapping.value[field] = v === '' ? null : Number(v)
   rebuild()
+}
+
+/** Ask Gemini to read a messy sheet and fill the review table with its proposals. */
+async function runAi() {
+  aiLoading.value = true
+  try {
+    const { data } = await api.post<AiImportResult>('/conflicts/import/ai', {
+      productionId: props.productionId,
+      rows: rawRows.value,
+    })
+    if (!data.configured) {
+      toast.error('AI isn’t configured on the server (no Gemini key).')
+      return
+    }
+    if (!data.ok) {
+      toast.error("The AI couldn't read that sheet — try again, or map the columns by hand.")
+      return
+    }
+    const byName = new Map(castOptions.value.map((o) => [o.name.toLowerCase(), o.id]))
+    reviewRows.value = data.rows.map((r): ReviewRow => ({
+      name: r.performerName,
+      // Prefer the AI's roster match; fall back to our own matcher on the raw name.
+      performerId: byName.get(r.matchedName.toLowerCase()) ?? matchPerformer(r.performerName, props.cast),
+      startDate: r.startDate || null,
+      endDate: r.endDate || null,
+      weekdays: r.weekdays,
+      reason: r.reason || null,
+      include: true,
+    }))
+    for (const row of reviewRows.value) if (rowStatus(row, props.existing) === 'duplicate') row.include = false
+    toast.success(`AI found ${data.rows.length} conflict${data.rows.length === 1 ? '' : 's'} — review below.`)
+  } catch {
+    toast.error('AI cleanup failed — is the server running?')
+  } finally {
+    aiLoading.value = false
+  }
 }
 
 const statusOf = (r: ReviewRow) => rowStatus(r, props.existing)
@@ -187,11 +225,23 @@ const FIELDS: { key: keyof ColumnMap; label: string; required?: boolean }[] = [
 
         <!-- Step 2: mapping -->
         <div v-if="rawRows.length > 0" class="mt-4 space-y-3">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-center justify-between gap-2">
             <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Match columns</span>
-            <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <input type="checkbox" v-model="hasHeader" @change="rebuild" /> First row is a header
-            </label>
+            <div class="flex items-center gap-3">
+              <button
+                class="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+                title="Let AI read a messy sheet and fill the review table"
+                :disabled="aiLoading"
+                @click="runAi"
+              >
+                <Loader2 v-if="aiLoading" class="h-3.5 w-3.5 animate-spin" />
+                <Sparkles v-else class="h-3.5 w-3.5" />
+                {{ aiLoading ? 'Reading…' : 'Clean up with AI' }}
+              </button>
+              <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input type="checkbox" v-model="hasHeader" @change="rebuild" /> First row is a header
+              </label>
+            </div>
           </div>
           <div class="grid gap-2 sm:grid-cols-5">
             <label v-for="f in FIELDS" :key="f.key" class="space-y-1">

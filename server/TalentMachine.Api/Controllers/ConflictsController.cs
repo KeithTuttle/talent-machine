@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TalentMachine.Api.Auth;
 using TalentMachine.Api.Data;
 using TalentMachine.Api.Models;
+using TalentMachine.Api.Services;
 
 namespace TalentMachine.Api.Controllers;
 
@@ -21,6 +22,7 @@ public class ConflictsController : ControllerBase
     }
 
     public record BulkRequest(int ProductionId, List<Conflict> Conflicts);
+    public record AiImportRequest(int ProductionId, List<List<string>> Rows);
 
     // GET /api/conflicts?productionId=&performerId=
     [HttpGet]
@@ -78,6 +80,24 @@ public class ConflictsController : ControllerBase
         _db.Conflicts.AddRange(rows);
         await _db.SaveChangesAsync();
         return Ok(rows);
+    }
+
+    // POST /api/conflicts/import/ai — let Gemini extract conflicts from a messy
+    // sheet. Read-only: returns proposals for the client to review, imports nothing.
+    [HttpPost("import/ai")]
+    public async Task<ActionResult<AiImportResult>> ImportAi(
+        AiImportRequest input, [FromServices] ConflictImportAiService ai)
+    {
+        if (!_tenant.CanAccessProduction(input.ProductionId)) return StatusCode(403);
+        if (!ai.IsConfigured) return new AiImportResult(false, false, new());
+
+        var castIds = await _db.CastMemberships
+            .Where(m => m.ProductionId == input.ProductionId).Select(m => m.PerformerId).ToListAsync();
+        var performers = await _db.Performers.Where(p => castIds.Contains(p.Id)).ToListAsync();
+        var roster = performers
+            .Select(p => new RosterMember($"{p.FirstName} {p.LastName}".Trim())).ToList();
+
+        return await ai.ExtractAsync(input.Rows, roster);
     }
 
     [HttpPut("{id:int}")]

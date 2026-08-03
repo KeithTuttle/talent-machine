@@ -140,6 +140,22 @@ export interface NumberCharacter {
   roleId: number
 }
 
+/** A conflict Gemini extracted from a messy sheet (mirrors ConflictImportAiService). */
+export interface AiConflictRow {
+  performerName: string
+  matchedName: string
+  type: 'OneOff' | 'Weekly'
+  startDate: string
+  endDate: string
+  weekdays: Weekday[]
+  reason: string
+}
+export interface AiImportResult {
+  configured: boolean
+  ok: boolean
+  rows: AiConflictRow[]
+}
+
 export type PropStatus = 'Needed' | 'Sourced' | 'Ready'
 export const PROP_STATUSES: PropStatus[] = ['Needed', 'Sourced', 'Ready']
 

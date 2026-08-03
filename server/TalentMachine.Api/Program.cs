@@ -56,6 +56,7 @@ builder.Services.AddScoped<PropsPdfService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<RehearsalAiService>();
 builder.Services.AddScoped<FormationAiService>();
+builder.Services.AddScoped<ConflictImportAiService>();
 // Outbound email (Gmail SMTP) for rehearsal schedules + team invites.
 builder.Services.AddScoped<EmailService>();
 
