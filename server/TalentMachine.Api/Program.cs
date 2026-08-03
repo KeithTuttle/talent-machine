@@ -57,6 +57,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<RehearsalAiService>();
 builder.Services.AddScoped<FormationAiService>();
 builder.Services.AddScoped<ConflictImportAiService>();
+builder.Services.AddScoped<GeminiClient>();
+builder.Services.AddScoped<CastImportAiService>();
 // Outbound email (Gmail SMTP) for rehearsal schedules + team invites.
 builder.Services.AddScoped<EmailService>();
 

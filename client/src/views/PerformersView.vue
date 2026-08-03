@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, Plus, Trash2, Upload, X } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
 import { ageOn } from '@/lib/age'
+import CastImportDialog from '@/components/CastImportDialog.vue'
 import type { Gender, Guardian, Performer, PerformerGuardian } from '@/types'
 
 const performers = ref<Performer[]>([])
@@ -19,14 +20,16 @@ const genderLabel = (g?: Gender | null) => genderOptions.find((o) => o.value ===
 
 const guardians = ref<Guardian[]>([])
 const guardianLinks = ref<PerformerGuardian[]>([])
+const importOpen = ref(false)
 
-onMounted(async () => {
+async function loadAll() {
   ;[performers.value, guardians.value, guardianLinks.value] = await Promise.all([
     api.get<Performer[]>('/performers').then((r) => r.data).catch(() => []),
     api.get<Guardian[]>('/guardians').then((r) => r.data).catch(() => []),
     api.get<PerformerGuardian[]>('/performerguardians').then((r) => r.data).catch(() => []),
   ])
-})
+}
+onMounted(loadAll)
 
 // --- Add form (collapsible; captures guardian + notes in one step) -----------
 
@@ -185,13 +188,28 @@ async function unlinkGuardian(performerId: number, guardianId: number) {
           Your company's performers across all seasons — one record each, history spans years.
         </p>
       </div>
-      <button
-        class="flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-        @click="addOpen = !addOpen"
-      >
-        <Plus class="h-4 w-4" /> Add performer
-      </button>
+      <div class="flex shrink-0 items-center gap-2">
+        <button
+          class="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+          @click="importOpen = true"
+        >
+          <Upload class="h-4 w-4" /> Import CSV/Excel
+        </button>
+        <button
+          class="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+          @click="addOpen = !addOpen"
+        >
+          <Plus class="h-4 w-4" /> Add performer
+        </button>
+      </div>
     </div>
+
+    <CastImportDialog
+      :open="importOpen"
+      :roster="performers"
+      @close="importOpen = false"
+      @imported="loadAll"
+    />
 
     <!-- Add form -->
     <form v-if="addOpen" class="space-y-3 rounded-lg border border-border p-4" @submit.prevent="addPerformer">

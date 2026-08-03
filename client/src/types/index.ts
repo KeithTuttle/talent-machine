@@ -156,6 +156,45 @@ export interface AiImportResult {
   rows: AiConflictRow[]
 }
 
+// Cast import (mirrors CastImportController / CastImportAiService).
+export interface CastImportRow {
+  existingPerformerId: number | null
+  firstName: string
+  lastName: string
+  gender: Gender | null
+  dateOfBirth: string | null
+  notes: string | null
+  castGroup: string | null
+  guardianName: string | null
+  guardianEmail: string | null
+  guardianPhone: string | null
+}
+export interface CastImportSummary {
+  performersCreated: number
+  performersMatched: number
+  addedToCast: number
+  alreadyInCast: number
+  guardiansCreated: number
+  groupsCreated: number
+}
+export interface AiCastRow {
+  firstName: string
+  lastName: string
+  gender: string
+  dateOfBirth: string
+  age: number | null
+  notes: string
+  guardianName: string
+  guardianEmail: string
+  guardianPhone: string
+  castGroup: string
+}
+export interface AiCastResult {
+  configured: boolean
+  ok: boolean
+  rows: AiCastRow[]
+}
+
 export type PropStatus = 'Needed' | 'Sourced' | 'Ready'
 export const PROP_STATUSES: PropStatus[] = ['Needed', 'Sourced', 'Ready']
 
