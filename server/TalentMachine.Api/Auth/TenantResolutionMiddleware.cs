@@ -26,12 +26,16 @@ public class TenantResolutionMiddleware
 
             if (!string.IsNullOrEmpty(clerkUserId))
             {
-                // Membership is a global table (not tenant-scoped) so this lookup
-                // is not subject to the tenant query filter.
-                var membership = await db.Memberships
-                    .FirstOrDefaultAsync(m => m.ClerkUserId == clerkUserId);
+                // Membership is a global table (not tenant-scoped) so these lookups
+                // are not subject to the tenant query filter. A user can belong to
+                // several companies; the X-Tenant-Id header picks which is active.
+                var memberships = await db.Memberships
+                    .Where(m => m.ClerkUserId == clerkUserId)
+                    .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
+                    .ToListAsync();
 
-                if (membership is null)
+                Membership? membership;
+                if (memberships.Count == 0)
                 {
                     var tenant = new Tenant { Name = DeriveTenantName(context.User) };
                     db.Tenants.Add(tenant);
@@ -48,7 +52,17 @@ public class TenantResolutionMiddleware
                     db.Memberships.Add(membership);
                     await db.SaveChangesAsync();
                 }
-                else if (membership.Email is null)
+                else
+                {
+                    // Active company = the requested one IF the caller belongs to it;
+                    // otherwise fall back to their default (oldest). A stale or spoofed
+                    // header can never resolve to a company they're not a member of.
+                    int? requested = int.TryParse(context.Request.Headers["X-Tenant-Id"], out var t) ? t : null;
+                    membership = (requested is int rid ? memberships.FirstOrDefault(m => m.TenantId == rid) : null)
+                        ?? memberships[0];
+                }
+
+                if (membership.Email is null)
                 {
                     // Backfill display fields when the claim is available and the
                     // field is still empty (claims are optional on session tokens).

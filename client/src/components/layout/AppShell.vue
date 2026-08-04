@@ -6,16 +6,29 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import Toaster from '@/components/ui/Toaster.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useScopeStore } from '@/stores/scope'
+import { useCompanyStore } from '@/stores/company'
 
 const scope = useScopeStore()
+const company = useCompanyStore()
 const route = useRoute()
+const authEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 // Off-canvas drawer state (mobile only; sidebar is persistent on md+).
 const mobileNavOpen = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
   // Best-effort: won't error the UI if the API isn't running yet.
-  scope.fetchAll().catch(() => {})
+  try {
+    // Resolve which company is active BEFORE loading its scoped data, so the
+    // X-Tenant-Id header is set on the first scope request. No-op when auth is off.
+    if (authEnabled) {
+      await company.fetchCompanies()
+      company.ensureActive()
+    }
+    await scope.fetchAll()
+  } catch {
+    // ignore — the UI degrades to empty states
+  }
 })
 
 // Close the drawer whenever navigation happens.

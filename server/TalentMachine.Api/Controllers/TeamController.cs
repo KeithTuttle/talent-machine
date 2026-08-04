@@ -42,7 +42,7 @@ public class TeamController : ControllerBase
     public record TeamResponse(string TenantName, string YourRole, List<MemberDto> Members, List<InvitationDto> Invitations);
     public record CreateInviteRequest(string Name, string Email, int? ProductionId);
     public record JoinRequest(string Code);
-    public record JoinResponse(string TenantName);
+    public record JoinResponse(string TenantName, int TenantId);
     public record AccessRequest(int ProductionId);
 
     // Unambiguous alphabet (no 0/O/1/I/L) for join codes read out loud or typed.
@@ -193,9 +193,9 @@ public class TeamController : ControllerBase
         return NoContent();
     }
 
-    // POST /api/team/join — redeem a code: move the caller's membership into the
-    // inviting tenant (as a Member) and grant the invite's show, if any. Their
-    // auto-provisioned empty tenant is left behind.
+    // POST /api/team/join — redeem a code: ADD a membership in the inviting tenant
+    // (as a Member) and grant the invite's show, if any. The caller keeps every
+    // other company they belong to; the client switches to the joined one.
     [HttpPost("join")]
     public async Task<ActionResult<JoinResponse>> Join(JoinRequest input)
     {
@@ -211,37 +211,45 @@ public class TeamController : ControllerBase
             .FirstOrDefaultAsync(i => i.Code == code && i.AcceptedAt == null);
         if (invite is null) return NotFound("That invite code isn't valid (it may have been revoked or already used).");
 
-        var membership = await _db.Memberships.FirstOrDefaultAsync(m => m.ClerkUserId == caller);
-        if (membership is null) return BadRequest("No account found — reload and try again.");
-
         var tenantName = await _db.Tenants
             .Where(t => t.Id == invite.TenantId)
             .Select(t => t.Name)
             .FirstOrDefaultAsync() ?? "the team";
 
-        if (membership.TenantId == invite.TenantId)
-            return new JoinResponse(tenantName); // already a member — idempotent
-
-        membership.TenantId = invite.TenantId;
-        membership.Role = invite.Role;
-        invite.AcceptedAt = DateTimeOffset.UtcNow;
-        invite.AcceptedByClerkUserId = caller;
-
-        // Show-scoped invite → grant that show. TenantId is set explicitly: the
-        // row belongs to the INVITING tenant, not the caller's current one.
-        if (invite.ProductionId is not null)
+        // Already a member of this company? Idempotent — nothing to add.
+        var membership = await _db.Memberships
+            .FirstOrDefaultAsync(m => m.ClerkUserId == caller && m.TenantId == invite.TenantId);
+        if (membership is null)
         {
-            _db.ProductionAccesses.Add(new ProductionAccess
+            membership = new Membership
             {
                 TenantId = invite.TenantId,
-                MembershipId = membership.Id,
-                ProductionId = invite.ProductionId.Value,
-            });
+                ClerkUserId = caller,
+                Role = invite.Role,
+                Email = User.FindFirst("email")?.Value ?? User.FindFirst(ClaimTypes.Email)?.Value,
+                DisplayName = User.FindFirst("name")?.Value,
+            };
+            _db.Memberships.Add(membership);
+            await _db.SaveChangesAsync(); // need the membership id for the access grant
+
+            // Show-scoped invite → grant that show. TenantId is explicit: the row
+            // belongs to the INVITING tenant.
+            if (invite.ProductionId is not null)
+            {
+                _db.ProductionAccesses.Add(new ProductionAccess
+                {
+                    TenantId = invite.TenantId,
+                    MembershipId = membership.Id,
+                    ProductionId = invite.ProductionId.Value,
+                });
+            }
         }
 
+        invite.AcceptedAt = DateTimeOffset.UtcNow;
+        invite.AcceptedByClerkUserId = caller;
         await _db.SaveChangesAsync();
 
-        return new JoinResponse(tenantName);
+        return new JoinResponse(tenantName, invite.TenantId);
     }
 
     // POST /api/team/members/{id}/access — grant a member access to a show (owners only).

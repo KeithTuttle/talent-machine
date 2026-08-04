@@ -35,6 +35,10 @@ api.interceptors.request.use(async (config) => {
   } catch {
     // No session / Clerk not ready — send the request unauthenticated.
   }
+  // Which company (tenant) to act as, when the user belongs to several. The server
+  // validates it against the caller's memberships, so a stale value is harmless.
+  const activeCompanyId = localStorage.getItem('activeCompanyId')
+  if (activeCompanyId) config.headers['X-Tenant-Id'] = activeCompanyId
   return config
 })
 

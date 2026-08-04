@@ -195,6 +195,14 @@ export interface AiCastResult {
   rows: AiCastRow[]
 }
 
+/** A company (tenant) the signed-in user belongs to (for the switcher). */
+export interface Company {
+  tenantId: number
+  name: string
+  role: string
+  isActive: boolean
+}
+
 export type PropStatus = 'Needed' | 'Sourced' | 'Ready'
 export const PROP_STATUSES: PropStatus[] = ['Needed', 'Sourced', 'Ready']
 

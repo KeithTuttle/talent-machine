@@ -86,8 +86,9 @@ public class AppDbContext : DbContext
         b.Entity<SceneCharacter>().HasKey(x => new { x.SceneId, x.RoleId });
         b.Entity<NumberCharacter>().HasKey(x => new { x.MusicalNumberId, x.RoleId });
 
-        // One Clerk user maps to exactly one membership.
-        b.Entity<Membership>().HasIndex(x => x.ClerkUserId).IsUnique();
+        // A Clerk user can belong to several companies, but only once each.
+        b.Entity<Membership>().HasIndex(x => new { x.ClerkUserId, x.TenantId }).IsUnique();
+        b.Entity<Membership>().HasIndex(x => x.ClerkUserId); // fast lookup of a user's companies
         // Join codes are redeemed by exact lookup and must be unique.
         b.Entity<Invitation>().HasIndex(x => x.Code).IsUnique();
 

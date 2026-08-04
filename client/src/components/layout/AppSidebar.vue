@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
 import { useScopeStore } from '@/stores/scope'
+import { useCompanyStore } from '@/stores/company'
 import {
   LayoutDashboard,
   Drama,
@@ -14,6 +15,11 @@ import {
   CalendarOff,
   CalendarRange,
   UserPlus,
+  Building2,
+  Check,
+  ChevronDown,
+  Plus,
+  LogIn,
   ChevronsLeft,
   ChevronsRight,
   Sun,
@@ -26,8 +32,26 @@ defineProps<{ open?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const scope = useScopeStore()
+const company = useCompanyStore()
+const router = useRouter()
 const collapsed = ref(false) // desktop icon-only mode
 const authEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const switcherOpen = ref(false)
+
+async function switchTo(id: number) {
+  switcherOpen.value = false
+  await company.switchCompany(id)
+}
+async function newCompany() {
+  switcherOpen.value = false
+  const name = window.prompt('Name your new company:')
+  if (name?.trim()) await company.createCompany(name.trim())
+}
+function goJoin() {
+  switcherOpen.value = false
+  router.push('/team')
+  emit('close')
+}
 
 // Dark mode: toggles the `.dark` class Tailwind's darkMode:['class'] strategy
 // looks for, and persists the choice to localStorage. Defaults to the OS
@@ -89,6 +113,40 @@ function onProductionChange(e: Event) {
       >
         <X class="h-4 w-4" />
       </button>
+    </div>
+
+    <!-- Company switcher (only with auth on; a user may belong to several) -->
+    <div v-if="authEnabled && !collapsed" class="relative border-b border-border p-2">
+      <button
+        class="flex w-full items-center gap-2 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent"
+        @click="switcherOpen = !switcherOpen"
+      >
+        <Building2 class="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span class="min-w-0 flex-1 truncate text-left font-medium">{{ company.activeCompany?.name ?? 'Company' }}</span>
+        <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+      <template v-if="switcherOpen">
+        <div class="fixed inset-0 z-40" @click="switcherOpen = false" />
+        <div class="absolute left-2 right-2 top-full z-50 mt-1 rounded-md border border-border bg-background p-1 shadow-lg">
+          <button
+            v-for="c in company.companies"
+            :key="c.tenantId"
+            class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+            @click="switchTo(c.tenantId)"
+          >
+            <Check class="h-3.5 w-3.5 shrink-0" :class="c.tenantId === company.activeCompanyId ? 'text-primary' : 'invisible'" />
+            <span class="min-w-0 flex-1 truncate text-left">{{ c.name }}</span>
+            <span class="shrink-0 text-xs text-muted-foreground">{{ c.role }}</span>
+          </button>
+          <div class="my-1 border-t border-border" />
+          <button class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent" @click="newCompany">
+            <Plus class="h-3.5 w-3.5" /> New company
+          </button>
+          <button class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent" @click="goJoin">
+            <LogIn class="h-3.5 w-3.5" /> Join with a code…
+          </button>
+        </div>
+      </template>
     </div>
 
     <!-- Season + production pickers -->

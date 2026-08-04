@@ -6,12 +6,14 @@ import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
 import { useScopeStore } from '@/stores/scope'
 import { useStaffStore } from '@/stores/staff'
+import { useCompanyStore } from '@/stores/company'
 import StaffPicker from '@/components/StaffPicker.vue'
 import { STAFF_ROLE_LABELS } from '@/types'
 import type { ProductionStaff, StaffMember, TeamMember, TeamResponse } from '@/types'
 
 const scope = useScopeStore()
 const staff = useStaffStore()
+const company = useCompanyStore()
 
 const tab = ref<'team' | 'directory'>('team')
 const team = ref<TeamResponse | null>(null)
@@ -90,10 +92,12 @@ async function revokeInvite(id: number) {
 async function join() {
   const code = joinCode.value.trim()
   if (!code) return
-  const { data } = await api.post<{ tenantName: string }>('/team/join', { code })
-  toast.success(`Joined ${data.tenantName} — reloading…`)
+  const { data } = await api.post<{ tenantName: string; tenantId: number }>('/team/join', { code })
+  toast.success(`Joined ${data.tenantName} — switching…`)
   joinCode.value = ''
-  window.setTimeout(() => window.location.reload(), 800)
+  // Make the joined company active before reloading so the app lands inside it.
+  company.setActive(data.tenantId)
+  window.setTimeout(() => window.location.reload(), 700)
 }
 
 // --- Member access -----------------------------------------------------------
@@ -302,7 +306,8 @@ const directory = computed<DirectoryRow[]>(() =>
           <button type="submit" class="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent">Join</button>
         </form>
         <p class="px-4 pb-4 text-xs text-muted-foreground">
-          Joining moves your account into the inviting company; your current (empty) account is left behind.
+          Joining adds the company to your account — you can switch between it and your others from the
+          company menu at the top of the sidebar.
         </p>
       </section>
     </template>

@@ -60,6 +60,16 @@ export const useScopeStore = defineStore('scope', () => {
     localStorage.setItem('selectedProductionId', String(id))
   }
 
+  /** Clear all scoped state + persisted selections — used when switching companies. */
+  function reset() {
+    seasons.value = []
+    productions.value = []
+    selectedSeasonId.value = null
+    selectedProductionId.value = null
+    localStorage.removeItem('selectedSeasonId')
+    localStorage.removeItem('selectedProductionId')
+  }
+
   /** Keep the production selection inside the selected season. */
   function ensureProductionSelection() {
     const inSeason = seasonProductions.value
@@ -82,5 +92,6 @@ export const useScopeStore = defineStore('scope', () => {
     fetchAll,
     selectSeason,
     selectProduction,
+    reset,
   }
 })
