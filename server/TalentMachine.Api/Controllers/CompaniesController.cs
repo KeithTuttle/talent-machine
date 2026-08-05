@@ -99,4 +99,41 @@ public class CompaniesController : ControllerBase
 
         return new CompanyDto(tenant.Id, tenant.Name, membership.Role.ToString(), tenant.Id == _tenant.TenantId);
     }
+
+    // DELETE /api/companies/{id} — permanently delete a company and ALL its data
+    // (Owner of that company only). One transaction: either everything goes or nothing.
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var caller = CallerId;
+        if (caller is null) return Unauthorized();
+
+        var membership = await _db.Memberships.FirstOrDefaultAsync(m => m.ClerkUserId == caller && m.TenantId == id);
+        if (membership is null) return NotFound();
+        if (membership.Role != MembershipRole.Owner) return StatusCode(403);
+
+        // Tenant-scoped rows carry a TenantId but no FK to Tenants, so nothing cascades
+        // on its own. Point the query filter at this company and remove all of its data;
+        // loading + RemoveRange lets EF order the deletes to respect inter-table FKs.
+        _tenant.TenantId = id;
+        var setMethod = typeof(DbContext).GetMethod(nameof(DbContext.Set), genericParameterCount: 1, types: Type.EmptyTypes)!;
+        foreach (var clr in _db.Model.GetEntityTypes()
+            .Where(et => typeof(ITenantScoped).IsAssignableFrom(et.ClrType))
+            .Select(et => et.ClrType).Distinct())
+        {
+            var query = (IQueryable)setMethod.MakeGenericMethod(clr).Invoke(_db, null)!;
+            var rows = new List<object>();
+            foreach (var e in query) rows.Add(e);
+            if (rows.Count > 0) _db.RemoveRange(rows);
+        }
+
+        // Memberships are a global table (everyone's membership in this company goes),
+        // then the company itself.
+        _db.Memberships.RemoveRange(_db.Memberships.Where(m => m.TenantId == id));
+        var target = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == id);
+        if (target is not null) _db.Tenants.Remove(target);
+
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
 }

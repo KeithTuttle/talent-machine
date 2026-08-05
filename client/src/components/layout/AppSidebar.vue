@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
 import { useScopeStore } from '@/stores/scope'
 import { useCompanyStore } from '@/stores/company'
+import { confirm } from '@/lib/confirm'
 import {
   LayoutDashboard,
   Drama,
@@ -20,6 +21,7 @@ import {
   ChevronDown,
   Plus,
   Pencil,
+  Trash2,
   LogIn,
   ChevronsLeft,
   ChevronsRight,
@@ -54,6 +56,17 @@ async function renameCompany(c: { tenantId: number; name: string }) {
     switcherOpen.value = false
     await company.renameCompany(c.tenantId, name.trim())
   }
+}
+async function deleteCompany(c: { tenantId: number; name: string }) {
+  switcherOpen.value = false
+  const ok = await confirm({
+    title: `Delete “${c.name}”?`,
+    message:
+      'This permanently deletes the company and everything in it — seasons, shows, performers, casting, rehearsals, and conflicts. This cannot be undone.',
+    destructive: true,
+    confirmText: 'Delete company',
+  })
+  if (ok) await company.deleteCompany(c.tenantId)
 }
 function goJoin() {
   switcherOpen.value = false
@@ -148,11 +161,19 @@ function onProductionChange(e: Event) {
             </button>
             <button
               v-if="c.role === 'Owner'"
-              class="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:text-foreground"
+              class="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground"
               title="Rename company"
               @click.stop="renameCompany(c)"
             >
               <Pencil class="h-3.5 w-3.5" />
+            </button>
+            <button
+              v-if="c.role === 'Owner'"
+              class="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
+              title="Delete company"
+              @click.stop="deleteCompany(c)"
+            >
+              <Trash2 class="h-3.5 w-3.5" />
             </button>
           </div>
           <div class="my-1 border-t border-border" />

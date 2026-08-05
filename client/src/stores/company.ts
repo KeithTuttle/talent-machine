@@ -74,6 +74,18 @@ export const useCompanyStore = defineStore('company', () => {
     await fetchCompanies()
   }
 
+  async function deleteCompany(id: number) {
+    await api.delete(`/companies/${id}`)
+    await fetchCompanies()
+    // If the deleted company was active, fall back to a remaining one and reload.
+    if (!companies.value.some((c) => c.tenantId === activeCompanyId.value)) {
+      setActive(companies.value[0]?.tenantId ?? null)
+      const scope = useScopeStore()
+      scope.reset()
+      await scope.fetchAll()
+    }
+  }
+
   return {
     companies,
     activeCompanyId,
@@ -85,6 +97,7 @@ export const useCompanyStore = defineStore('company', () => {
     switchCompany,
     createCompany,
     renameCompany,
+    deleteCompany,
     setActive,
   }
 })
