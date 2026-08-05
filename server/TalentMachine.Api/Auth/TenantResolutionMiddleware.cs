@@ -15,7 +15,17 @@ public class TenantResolutionMiddleware
 {
     private readonly RequestDelegate _next;
 
+    // Serializes first-login auto-provisioning so concurrent initial requests
+    // don't each create a tenant for the same new user.
+    private static readonly SemaphoreSlim _provisionGate = new(1, 1);
+
     public TenantResolutionMiddleware(RequestDelegate next) => _next = next;
+
+    private static Task<List<Membership>> LoadMembershipsAsync(AppDbContext db, string clerkUserId) =>
+        db.Memberships
+            .Where(m => m.ClerkUserId == clerkUserId)
+            .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
+            .ToListAsync();
 
     public async Task InvokeAsync(HttpContext context, AppDbContext db, ICurrentTenant currentTenant)
     {
@@ -29,38 +39,50 @@ public class TenantResolutionMiddleware
                 // Membership is a global table (not tenant-scoped) so these lookups
                 // are not subject to the tenant query filter. A user can belong to
                 // several companies; the X-Tenant-Id header picks which is active.
-                var memberships = await db.Memberships
-                    .Where(m => m.ClerkUserId == clerkUserId)
-                    .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
-                    .ToListAsync();
+                var memberships = await LoadMembershipsAsync(db, clerkUserId);
 
-                Membership? membership;
                 if (memberships.Count == 0)
                 {
-                    var tenant = new Tenant { Name = DeriveTenantName(context.User) };
-                    db.Tenants.Add(tenant);
-                    await db.SaveChangesAsync();
-
-                    membership = new Membership
+                    // First login → auto-provision one company. Serialize it: on the
+                    // first request the client fires several calls at once, and without
+                    // this two of them could each create a tenant (they'd be distinct,
+                    // so the unique index wouldn't catch it) — leaving a duplicate
+                    // "My Company". In-process guard; correct for a single instance.
+                    await _provisionGate.WaitAsync();
+                    try
                     {
-                        TenantId = tenant.Id,
-                        ClerkUserId = clerkUserId,
-                        Role = MembershipRole.Owner,
-                        Email = FindEmail(context.User),
-                        DisplayName = context.User.FindFirst("name")?.Value,
-                    };
-                    db.Memberships.Add(membership);
-                    await db.SaveChangesAsync();
+                        memberships = await LoadMembershipsAsync(db, clerkUserId); // re-check under the lock
+                        if (memberships.Count == 0)
+                        {
+                            var tenant = new Tenant { Name = DeriveTenantName(context.User) };
+                            db.Tenants.Add(tenant);
+                            await db.SaveChangesAsync();
+
+                            var created = new Membership
+                            {
+                                TenantId = tenant.Id,
+                                ClerkUserId = clerkUserId,
+                                Role = MembershipRole.Owner,
+                                Email = FindEmail(context.User),
+                                DisplayName = context.User.FindFirst("name")?.Value,
+                            };
+                            db.Memberships.Add(created);
+                            await db.SaveChangesAsync();
+                            memberships = new List<Membership> { created };
+                        }
+                    }
+                    finally
+                    {
+                        _provisionGate.Release();
+                    }
                 }
-                else
-                {
-                    // Active company = the requested one IF the caller belongs to it;
-                    // otherwise fall back to their default (oldest). A stale or spoofed
-                    // header can never resolve to a company they're not a member of.
-                    int? requested = int.TryParse(context.Request.Headers["X-Tenant-Id"], out var t) ? t : null;
-                    membership = (requested is int rid ? memberships.FirstOrDefault(m => m.TenantId == rid) : null)
-                        ?? memberships[0];
-                }
+
+                // Active company = the requested one IF the caller belongs to it;
+                // otherwise fall back to their default (oldest). A stale or spoofed
+                // header can never resolve to a company they're not a member of.
+                int? requested = int.TryParse(context.Request.Headers["X-Tenant-Id"], out var t) ? t : null;
+                var membership = (requested is int rid ? memberships.FirstOrDefault(m => m.TenantId == rid) : null)
+                    ?? memberships[0];
 
                 if (membership.Email is null)
                 {

@@ -69,6 +69,11 @@ export const useCompanyStore = defineStore('company', () => {
     return data
   }
 
+  async function renameCompany(id: number, name: string) {
+    await api.put(`/companies/${id}`, { name })
+    await fetchCompanies()
+  }
+
   return {
     companies,
     activeCompanyId,
@@ -79,6 +84,7 @@ export const useCompanyStore = defineStore('company', () => {
     ensureActive,
     switchCompany,
     createCompany,
+    renameCompany,
     setActive,
   }
 })

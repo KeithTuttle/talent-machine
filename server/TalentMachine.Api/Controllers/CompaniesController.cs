@@ -27,6 +27,7 @@ public class CompaniesController : ControllerBase
 
     public record CompanyDto(int TenantId, string Name, string Role, bool IsActive);
     public record CreateCompanyRequest(string Name);
+    public record RenameCompanyRequest(string Name);
 
     private string? CallerId =>
         User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -76,5 +77,26 @@ public class CompaniesController : ControllerBase
         await _db.SaveChangesAsync();
 
         return new CompanyDto(tenant.Id, tenant.Name, membership.Role.ToString(), false);
+    }
+
+    // PUT /api/companies/{id} — rename a company (Owner of that company only).
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<CompanyDto>> Rename(int id, RenameCompanyRequest input)
+    {
+        var caller = CallerId;
+        if (caller is null) return Unauthorized();
+        var name = input.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return BadRequest("Enter a company name.");
+
+        var membership = await _db.Memberships.FirstOrDefaultAsync(m => m.ClerkUserId == caller && m.TenantId == id);
+        if (membership is null) return NotFound();
+        if (membership.Role != MembershipRole.Owner) return StatusCode(403);
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == id);
+        if (tenant is null) return NotFound();
+        tenant.Name = name;
+        await _db.SaveChangesAsync();
+
+        return new CompanyDto(tenant.Id, tenant.Name, membership.Role.ToString(), tenant.Id == _tenant.TenantId);
     }
 }

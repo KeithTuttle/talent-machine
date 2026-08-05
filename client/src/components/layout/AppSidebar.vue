@@ -19,6 +19,7 @@ import {
   Check,
   ChevronDown,
   Plus,
+  Pencil,
   LogIn,
   ChevronsLeft,
   ChevronsRight,
@@ -46,6 +47,13 @@ async function newCompany() {
   switcherOpen.value = false
   const name = window.prompt('Name your new company:')
   if (name?.trim()) await company.createCompany(name.trim())
+}
+async function renameCompany(c: { tenantId: number; name: string }) {
+  const name = window.prompt('Rename company:', c.name)
+  if (name?.trim() && name.trim() !== c.name) {
+    switcherOpen.value = false
+    await company.renameCompany(c.tenantId, name.trim())
+  }
 }
 function goJoin() {
   switcherOpen.value = false
@@ -128,16 +136,25 @@ function onProductionChange(e: Event) {
       <template v-if="switcherOpen">
         <div class="fixed inset-0 z-40" @click="switcherOpen = false" />
         <div class="absolute left-2 right-2 top-full z-50 mt-1 rounded-md border border-border bg-background p-1 shadow-lg">
-          <button
+          <div
             v-for="c in company.companies"
             :key="c.tenantId"
-            class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
-            @click="switchTo(c.tenantId)"
+            class="flex items-center gap-1 rounded hover:bg-accent"
           >
-            <Check class="h-3.5 w-3.5 shrink-0" :class="c.tenantId === company.activeCompanyId ? 'text-primary' : 'invisible'" />
-            <span class="min-w-0 flex-1 truncate text-left">{{ c.name }}</span>
-            <span class="shrink-0 text-xs text-muted-foreground">{{ c.role }}</span>
-          </button>
+            <button class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-sm" @click="switchTo(c.tenantId)">
+              <Check class="h-3.5 w-3.5 shrink-0" :class="c.tenantId === company.activeCompanyId ? 'text-primary' : 'invisible'" />
+              <span class="min-w-0 flex-1 truncate text-left">{{ c.name }}</span>
+              <span class="shrink-0 text-xs text-muted-foreground">{{ c.role }}</span>
+            </button>
+            <button
+              v-if="c.role === 'Owner'"
+              class="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:text-foreground"
+              title="Rename company"
+              @click.stop="renameCompany(c)"
+            >
+              <Pencil class="h-3.5 w-3.5" />
+            </button>
+          </div>
           <div class="my-1 border-t border-border" />
           <button class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent" @click="newCompany">
             <Plus class="h-3.5 w-3.5" /> New company
