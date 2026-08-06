@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // Per-number editor opened from the overview grid (and the planner): title,
-// teach status, choreographer, costume label, cast, costume pieces + per-kid
-// sizes, and formations. Cast toggles are emitted so the parent keeps its
-// shared state in sync; costume data is loaded/saved here.
+// teach status, choreographer, cast, costumes (one or several "looks", with who
+// wears each) + per-kid sizes, and formations. Cast toggles are emitted so the
+// parent keeps its shared state in sync; costume data is loaded/saved here.
 import { computed, ref, watch } from 'vue'
-import { Plus, Trash2, X } from 'lucide-vue-next'
+import { AlertTriangle, Plus, Trash2, X } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { useStaffStore } from '@/stores/staff'
@@ -16,8 +16,8 @@ import type {
   CastGroup,
   CastMembership,
   CostumeAssignment,
-  CostumeGender,
   CostumePiece,
+  Gender,
   MusicalNumber,
   NumberCast,
   NumberCharacter,
@@ -126,9 +126,12 @@ function useCostumeLabel(label: string) {
   saveNumber()
 }
 
-// --- Costume pieces ----------------------------------------------------------
+// --- Costumes ----------------------------------------------------------------
 
-const GENDERS: CostumeGender[] = ['All', 'Boys', 'Girls']
+/** Only when a number has MORE THAN ONE costume is there a choice to make — the
+ * "who's in which costume" UI stays hidden until then, so the common
+ * everyone-wears-the-same-thing number stays simple. */
+const hasLooks = computed(() => pieces.value.length > 1)
 
 async function addPiece() {
   if (!props.number) return
@@ -185,9 +188,36 @@ async function saveAssignment(performerId: number, patch: Partial<CostumeAssignm
   a.id = data.id
 }
 
-/** Display name for a look in the per-kid picker. */
-const lookLabel = (p: CostumePiece) =>
-  p.label?.trim() || p.description?.trim() || (p.gender !== 'All' ? p.gender : 'Costume')
+// --- Who's in which costume --------------------------------------------------
+// Assignment reads costume-first ("who's wearing the bear?") rather than
+// kid-first, because that's how a director thinks about a mixed number.
+
+const wearersOfPiece = (pieceId: number) =>
+  wearers.value.filter((pid) => assignmentOf(pid)?.costumePieceId === pieceId)
+
+/** Kids in the number who aren't in any costume yet (only meaningful with 2+). */
+const unassignedWearers = computed(() =>
+  wearers.value.filter((pid) => assignmentOf(pid)?.costumePieceId == null),
+)
+
+const performerGender = (id: number) =>
+  (props.cast.find((m) => m.performerId === id)?.performer ??
+    props.performers.find((p) => p.id === id))?.gender ?? null
+
+/** Put everyone in this number of one gender into a costume — the usual split. */
+async function assignAllByGender(pieceId: number, gender: Gender) {
+  for (const pid of wearers.value) {
+    if (performerGender(pid) === gender && assignmentOf(pid)?.costumePieceId !== pieceId)
+      await saveAssignment(pid, { costumePieceId: pieceId })
+  }
+}
+
+async function addWearer(pieceId: number, e: Event) {
+  const select = e.target as HTMLSelectElement
+  const pid = Number(select.value)
+  select.value = ''
+  if (pid) await saveAssignment(pid, { costumePieceId: pieceId })
+}
 
 async function addExtra(e: Event) {
   const pid = Number((e.target as HTMLSelectElement).value)
@@ -299,26 +329,33 @@ const castPerformers = computed(() =>
           <label class="block space-y-1">
             <span class="text-xs font-medium text-muted-foreground">Costume label</span>
             <input v-model="number.costumeLabel" placeholder="e.g. Orphan rags" class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" @change="saveNumber" />
+            <p class="text-[11px] leading-snug text-muted-foreground">
+              Numbers sharing this name count as the same outfit — it drives the grid colors and
+              the quick-change warnings.
+            </p>
             <div v-if="costumeLabels.length" class="flex flex-wrap gap-1 pt-1">
               <span class="text-xs text-muted-foreground">Reuse:</span>
               <button v-for="c in costumeLabels" :key="c" class="rounded-full border border-border px-2 py-0.5 text-xs hover:bg-accent" @click="useCostumeLabel(c)">{{ c }}</button>
             </div>
           </label>
 
-          <!-- Pieces -->
+          <!-- What they wear -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pieces</span>
-              <button class="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs hover:bg-accent" @click="addPiece"><Plus class="h-3.5 w-3.5" /> Add piece</button>
+              <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What they wear</span>
+              <button class="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs hover:bg-accent" @click="addPiece">
+                <Plus class="h-3.5 w-3.5" /> {{ pieces.length === 0 ? 'Add a costume' : 'Add another costume' }}
+              </button>
             </div>
+            <p v-if="pieces.length === 0" class="rounded-md border border-dashed border-border p-3 text-center text-xs leading-relaxed text-muted-foreground">
+              Describe what this number wears. Add a second costume only if different kids wear
+              different things (e.g. some bears, some soldiers).
+            </p>
             <div v-for="p in pieces" :key="p.id" class="space-y-1.5 rounded-md border border-border p-2.5">
               <div class="flex items-center gap-2">
-                <input v-model="p.label" placeholder="Look (e.g. Bear)" class="w-28 shrink-0 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium focus:outline-none" title="Name this look so you can assign kids to it" @change="savePiece(p)" />
-                <select v-model="p.gender" class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none" @change="savePiece(p)">
-                  <option v-for="g in GENDERS" :key="g" :value="g">{{ g }}</option>
-                </select>
+                <input v-model="p.label" placeholder="Costume name (e.g. Bear)" class="w-36 shrink-0 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium focus:outline-none" @change="savePiece(p)" />
                 <input v-model="p.description" placeholder="Description" class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none" @change="savePiece(p)" />
-                <button class="rounded p-1 text-muted-foreground hover:text-destructive" title="Delete piece" @click="deletePiece(p)"><Trash2 class="h-3.5 w-3.5" /></button>
+                <button class="rounded p-1 text-muted-foreground hover:text-destructive" title="Delete this costume" @click="deletePiece(p)"><Trash2 class="h-3.5 w-3.5" /></button>
               </div>
               <div class="grid grid-cols-2 gap-1.5">
                 <input v-model="p.accessories" placeholder="Accessories" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="savePiece(p)" />
@@ -326,27 +363,45 @@ const castPerformers = computed(() =>
                 <input v-model="p.photoUrl" placeholder="Photo URL" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="savePiece(p)" />
                 <input v-model="p.vendorUrl" placeholder="Vendor URL" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="savePiece(p)" />
               </div>
+
+              <!-- Who's in this costume — only once there's more than one to choose from -->
+              <div v-if="hasLooks" class="space-y-1.5 border-t border-border pt-1.5">
+                <div class="flex flex-wrap items-center gap-1">
+                  <span class="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Wearing this</span>
+                  <span v-if="wearersOfPiece(p.id).length === 0" class="text-xs italic text-muted-foreground">nobody yet</span>
+                  <span v-for="pid in wearersOfPiece(p.id)" :key="pid" class="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
+                    {{ performerName(pid) }}
+                    <button class="hover:text-destructive" :aria-label="`Take ${performerName(pid)} out of this costume`" @click="saveAssignment(pid, { costumePieceId: null })">
+                      <X class="h-3 w-3" />
+                    </button>
+                  </span>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <select :value="''" class="rounded-md border border-dashed border-border bg-transparent px-2 py-1 text-xs text-muted-foreground focus:outline-none" @change="addWearer(p.id, $event)">
+                    <option value="">+ add kids…</option>
+                    <option v-for="pid in wearers.filter((w) => assignmentOf(w)?.costumePieceId !== p.id)" :key="pid" :value="pid">
+                      {{ performerName(pid) }}
+                    </option>
+                  </select>
+                  <button class="rounded-full border border-border px-2 py-0.5 text-xs hover:bg-accent" @click="assignAllByGender(p.id, 'Male')">all boys</button>
+                  <button class="rounded-full border border-border px-2 py-0.5 text-xs hover:bg-accent" @click="assignAllByGender(p.id, 'Female')">all girls</button>
+                </div>
+              </div>
             </div>
+            <p v-if="hasLooks && unassignedWearers.length > 0" class="flex items-start gap-1 text-xs text-orange-600 dark:text-orange-400">
+              <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>Not in a costume yet: {{ unassignedWearers.map(performerName).join(', ') }}</span>
+            </p>
           </div>
 
           <!-- Per-kid sizes -->
           <div class="space-y-2">
-            <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who wears it — sizes &amp; notes</span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sizes &amp; notes</span>
             <div v-for="pid in wearers" :key="pid" class="flex flex-wrap items-center gap-1.5 text-sm">
               <span class="w-28 truncate">
                 {{ performerName(pid) }}
                 <span v-if="!isCast(pid)" class="text-xs text-orange-600 dark:text-orange-400" title="On stage, not in the number">(extra)</span>
               </span>
-              <select
-                v-if="pieces.length"
-                :value="assignmentOf(pid)?.costumePieceId ?? ''"
-                class="w-24 rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
-                title="Which look this performer wears"
-                @change="saveAssignment(pid, { costumePieceId: ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null })"
-              >
-                <option value="">Look…</option>
-                <option v-for="p in pieces" :key="p.id" :value="p.id">{{ lookLabel(p) }}</option>
-              </select>
               <input :value="assignmentOf(pid)?.size ?? ''" placeholder="Size" class="w-20 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveAssignment(pid, { size: ($event.target as HTMLInputElement).value || null })" />
               <input :value="assignmentOf(pid)?.notes ?? ''" placeholder="Alteration notes" class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveAssignment(pid, { notes: ($event.target as HTMLInputElement).value || null })" />
               <button v-if="!isCast(pid)" class="rounded p-1 text-muted-foreground hover:text-destructive" title="Remove extra" @click="removeAssignment(pid)"><X class="h-3.5 w-3.5" /></button>
