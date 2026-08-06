@@ -289,9 +289,11 @@ const quickChanges = computed(() => {
               </th>
               <th class="sticky z-20 border-b border-border bg-background px-2 text-xs font-semibold" :class="hasActHeaders ? 'top-[25px]' : 'top-0'">#</th>
             </tr>
-            <!-- Costume color row -->
+            <!-- Costume color row — scrolls with the body (sticky-left only, like the
+                 other row labels); pinning just its label while the swatches scrolled
+                 away read as a detached "Costume" tag. -->
             <tr v-if="hasCostumes">
-              <th class="sticky left-0 z-20 border-b border-r border-border bg-background px-3 py-1 text-right text-[10px] uppercase text-muted-foreground" :class="hasActHeaders ? 'top-[calc(25px+9.5rem)]' : ''">
+              <th class="sticky left-0 z-20 border-b border-r border-border bg-background px-3 py-1 text-right text-[10px] uppercase text-muted-foreground">
                 Costume
               </th>
               <td
