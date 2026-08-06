@@ -15,6 +15,8 @@ public class CostumePiece : ITenantScoped
     public int MusicalNumberId { get; set; }
     /// <summary>Short name for this look (e.g. "Bear", "Soldier"); null = unnamed.</summary>
     public string? Label { get; set; }
+    /// <summary>Where this costume is in the gathering process.</summary>
+    public CostumeStatus Status { get; set; } = CostumeStatus.Needed;
     public CostumeGender Gender { get; set; } = CostumeGender.All;
     public string? Description { get; set; }
     public string? Accessories { get; set; }

@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CheckCircle2,
   LayoutDashboard,
+  Shirt,
   Users,
 } from 'lucide-vue-next'
 import { api } from '@/lib/api'
@@ -47,6 +48,12 @@ const rolesPct = computed(() =>
 )
 const castPct = computed(() =>
   data.value ? pct(data.value.rollups.numbersWithCast, data.value.rollups.numbersTotal) : 0,
+)
+const costumeReadyPct = computed(() =>
+  data.value ? pct(data.value.costumes.ready, data.value.costumes.total) : 0,
+)
+const fittingPct = computed(() =>
+  data.value ? pct(data.value.costumes.fittingsDone, data.value.costumes.fittingsTotal) : 0,
 )
 
 const countdownLabel = computed(() => {
@@ -134,6 +141,46 @@ function weekday(date: string) {
                 {{ data.rollups.teachNeedsReview }} need review
               </span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Costume readiness (only once there are costumes to track) -->
+      <div v-if="data.costumes.total > 0" class="rounded-lg border border-border bg-card p-5">
+        <h2 class="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
+          <Shirt class="h-5 w-5 text-primary" /> Costumes
+        </h2>
+        <div class="space-y-3">
+          <div>
+            <div class="mb-1 flex items-center justify-between text-sm">
+              <span class="font-medium">Costumes ready</span>
+              <span class="text-muted-foreground">{{ data.costumes.ready }}/{{ data.costumes.total }}</span>
+            </div>
+            <div class="h-2 overflow-hidden rounded-full bg-muted">
+              <div class="h-full rounded-full bg-green-500" :style="{ width: costumeReadyPct + '%' }" />
+            </div>
+          </div>
+          <div v-if="data.costumes.fittingsTotal > 0">
+            <div class="mb-1 flex items-center justify-between text-sm">
+              <span class="font-medium">Fittings done</span>
+              <span class="text-muted-foreground">{{ data.costumes.fittingsDone }}/{{ data.costumes.fittingsTotal }}</span>
+            </div>
+            <div class="h-2 overflow-hidden rounded-full bg-muted">
+              <div class="h-full rounded-full bg-primary" :style="{ width: fittingPct + '%' }" />
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-sm text-muted-foreground">
+            <span v-if="data.costumes.needed > 0" class="text-destructive">
+              {{ data.costumes.needed }} still needed
+            </span>
+            <span v-if="data.costumes.sourced > 0" class="text-amber-600 dark:text-amber-500">
+              {{ data.costumes.sourced }} sourced, not ready
+            </span>
+            <span v-if="data.costumes.quickChanges > 0">
+              <AlertTriangle class="mr-1 inline h-4 w-4 text-orange-500" />
+              {{ data.costumes.quickChanges }} back-to-back
+              {{ data.costumes.quickChanges === 1 ? 'change' : 'changes' }}
+            </span>
           </div>
         </div>
       </div>

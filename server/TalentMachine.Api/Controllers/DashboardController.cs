@@ -32,10 +32,13 @@ public class DashboardController : ControllerBase
         string? NumberTitle, int Attendees, int Conflicts);
     public record AtRiskDto(int PerformerId, string Name, int Present, int Total, int Percent);
     public record AttendanceDto(int RecordedSessions, int AvgPercent, List<AtRiskDto> AtRisk);
+    public record CostumesDto(
+        int Total, int Ready, int Sourced, int Needed,
+        int FittingsDone, int FittingsTotal, int QuickChanges);
     public record DashboardDto(
         int ProductionId, string Title,
         CountdownDto Countdown, RollupsDto Rollups,
-        List<WeekSlotDto> ThisWeek, AttendanceDto Attendance);
+        List<WeekSlotDto> ThisWeek, AttendanceDto Attendance, CostumesDto Costumes);
 
     // GET /api/dashboard?productionId=
     [HttpGet]
@@ -133,7 +136,30 @@ public class DashboardController : ControllerBase
             AtRisk: byPerformer.Where(p => p.Total > 0 && p.Percent < 75)
                 .OrderBy(p => p.Percent).ThenBy(p => p.Name).ToList());
 
+        // --- Costume readiness ---
+        // Fittings only count for kids actually put in a costume; an unassigned kid
+        // isn't "unfitted", there's just nothing to fit them in yet.
+        var pieces = await _db.CostumePieces.Where(p => numberIds.Contains(p.MusicalNumberId)).ToListAsync();
+        var costumeAssignments = await _db.CostumeAssignments
+            .Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync();
+        var acts = await _db.Acts.Where(a => a.ProductionId == productionId).ToListAsync();
+        var fittable = costumeAssignments.Where(a => a.CostumePieceId != null).ToList();
+        var costumes = new CostumesDto(
+            Total: pieces.Count,
+            Ready: pieces.Count(p => p.Status == CostumeStatus.Ready),
+            Sourced: pieces.Count(p => p.Status == CostumeStatus.Sourced),
+            Needed: pieces.Count(p => p.Status == CostumeStatus.Needed),
+            FittingsDone: fittable.Count(a => a.IsFitted),
+            FittingsTotal: fittable.Count,
+            // Count MOMENTS (a spot in the show needing a dresser), not per-kid
+            // changes, so this matches the overview panel's grouped rows.
+            QuickChanges: Services.CostumeChanges
+                .Detect(acts, numbers, casts, costumeAssignments, pieces)
+                .Where(c => c.Buffer == 0)
+                .Select(c => (c.From.Id, c.To.Id))
+                .Distinct().Count());
+
         return new DashboardDto(
-            production.Id, production.Title, countdown, rollups, thisWeek, attendance);
+            production.Id, production.Title, countdown, rollups, thisWeek, attendance, costumes);
     }
 }

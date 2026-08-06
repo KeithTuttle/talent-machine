@@ -17,6 +17,8 @@ public class CostumeAssignment : ITenantScoped
     public int? CostumePieceId { get; set; }
     public string? Size { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Has this performer been fitted in it? Drives the "who still needs a fitting" rollup.</summary>
+    public bool IsFitted { get; set; }
 
     public MusicalNumber? MusicalNumber { get; set; }
     public Performer? Performer { get; set; }

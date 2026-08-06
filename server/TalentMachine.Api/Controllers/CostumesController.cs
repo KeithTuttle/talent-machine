@@ -43,8 +43,63 @@ public class CostumesController : ControllerBase
             Performers = await _db.Performers.ToListAsync(),
         };
 
-        var safeTitle = string.Join("-", production.Title.Split(Path.GetInvalidFileNameChars(),
-            StringSplitOptions.RemoveEmptyEntries)).Replace(' ', '-').ToLowerInvariant();
-        return File(pdf.Build(data), "application/pdf", $"costumes-{safeTitle}.pdf");
+        return File(pdf.Build(data), "application/pdf", $"costumes-{SafeTitle(production.Title)}.pdf");
     }
+
+    // GET /api/costumes/quickchanges/pdf?productionId= — the dressers' wing sheet.
+    [HttpGet("quickchanges/pdf")]
+    public async Task<IActionResult> QuickChangesPdf(
+        [FromQuery] int productionId, [FromServices] QuickChangePdfService pdf)
+    {
+        if (!_tenant.CanAccessProduction(productionId)) return NotFound();
+        var production = await _db.FindScopedAsync<Production>(productionId);
+        if (production is null) return NotFound();
+
+        var numbers = await _db.Numbers.Where(n => n.ProductionId == productionId).ToListAsync();
+        var numberIds = numbers.Select(n => n.Id).ToList();
+
+        var data = new QuickChangeData
+        {
+            ProductionTitle = production.Title,
+            Acts = await _db.Acts.Where(a => a.ProductionId == productionId).ToListAsync(),
+            Numbers = numbers,
+            NumberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync(),
+            Assignments = await _db.CostumeAssignments.Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync(),
+            Pieces = await _db.CostumePieces.Where(p => numberIds.Contains(p.MusicalNumberId)).ToListAsync(),
+            Performers = await _db.Performers.ToListAsync(),
+        };
+
+        return File(pdf.Build(data), "application/pdf", $"quick-changes-{SafeTitle(production.Title)}.pdf");
+    }
+
+    // GET /api/costumes/plot/pdf?productionId= — one block per kid, for parents.
+    [HttpGet("plot/pdf")]
+    public async Task<IActionResult> PlotPdf(
+        [FromQuery] int productionId, [FromServices] CostumePlotPdfService pdf)
+    {
+        if (!_tenant.CanAccessProduction(productionId)) return NotFound();
+        var production = await _db.FindScopedAsync<Production>(productionId);
+        if (production is null) return NotFound();
+
+        var numbers = await _db.Numbers.Where(n => n.ProductionId == productionId).ToListAsync();
+        var numberIds = numbers.Select(n => n.Id).ToList();
+
+        var data = new CostumePlotData
+        {
+            ProductionTitle = production.Title,
+            Acts = await _db.Acts.Where(a => a.ProductionId == productionId).ToListAsync(),
+            Numbers = numbers,
+            NumberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync(),
+            Assignments = await _db.CostumeAssignments.Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync(),
+            Pieces = await _db.CostumePieces.Where(p => numberIds.Contains(p.MusicalNumberId)).ToListAsync(),
+            Performers = await _db.Performers.ToListAsync(),
+            Cast = await _db.CastMemberships.Where(m => m.ProductionId == productionId).ToListAsync(),
+        };
+
+        return File(pdf.Build(data), "application/pdf", $"costume-plot-{SafeTitle(production.Title)}.pdf");
+    }
+
+    private static string SafeTitle(string title) =>
+        string.Join("-", title.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries))
+            .Replace(' ', '-').ToLowerInvariant();
 }

@@ -33,11 +33,7 @@ public class CostumePdfService
         var piecesByNumber = data.Pieces.ToLookup(p => p.MusicalNumberId);
         var assignmentsByNumber = data.Assignments.ToLookup(a => a.MusicalNumberId);
 
-        // Numbers in running order: acts then unassigned.
-        var ordered = new List<MusicalNumber>();
-        foreach (var act in data.Acts.OrderBy(a => a.OrderIndex).ThenBy(a => a.Id))
-            ordered.AddRange(data.Numbers.Where(n => n.ActId == act.Id).OrderBy(n => n.OrderIndex).ThenBy(n => n.Id));
-        ordered.AddRange(data.Numbers.Where(n => n.ActId == null).OrderBy(n => n.OrderIndex).ThenBy(n => n.Id));
+        var ordered = CostumeChanges.RunningOrder(data.Acts, data.Numbers);
 
         var document = Document.Create(container =>
         {
@@ -157,11 +153,7 @@ public class CostumePdfService
         });
     }
 
-    private static string LookName(CostumePiece p) =>
-        !string.IsNullOrWhiteSpace(p.Label) ? p.Label!
-        : !string.IsNullOrWhiteSpace(p.Description) ? p.Description!
-        : p.Gender != CostumeGender.All ? p.Gender.ToString()
-        : "Costume";
+    private static string LookName(CostumePiece p) => CostumeChanges.LookName(p);
 
     private void ComposeWearer(
         IContainer container, int id, HashSet<int> cast,
@@ -175,6 +167,8 @@ public class CostumePdfService
             if (extra) t.Span("  (on stage, not in number)").FontSize(8).FontColor(Colors.Orange.Darken2);
             if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  — size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
             if (!string.IsNullOrWhiteSpace(a?.Notes)) t.Span($"  ({a!.Notes})").FontSize(9).Italic().FontColor(Colors.Grey.Medium);
+            if (a is { CostumePieceId: not null, IsFitted: false })
+                t.Span("  needs fitting").FontSize(8).Italic().FontColor(Colors.Red.Medium);
         });
     }
 
@@ -191,6 +185,11 @@ public class CostumePdfService
                 t.Span(label).SemiBold().FontColor(Colors.Grey.Darken2);
                 t.Span(string.IsNullOrWhiteSpace(p.Description) ? "(no description)" : p.Description!)
                     .FontColor(Colors.Black);
+                // Only call out what still needs doing — "Ready" is the quiet default.
+                if (p.Status != CostumeStatus.Ready)
+                    t.Span($"   {(p.Status == CostumeStatus.Needed ? "STILL NEEDED" : "sourced")}")
+                        .FontSize(8).SemiBold()
+                        .FontColor(p.Status == CostumeStatus.Needed ? Colors.Red.Medium : Colors.Orange.Darken2);
             });
             if (!string.IsNullOrWhiteSpace(p.Accessories))
                 col.Item().Text($"   Accessories: {p.Accessories}").FontSize(9).FontColor(Colors.Grey.Darken1);

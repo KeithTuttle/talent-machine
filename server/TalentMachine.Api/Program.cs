@@ -51,6 +51,8 @@ builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
 builder.Services.AddScoped<RehearsalPdfService>();
 builder.Services.AddScoped<ShowOrderPdfService>();
 builder.Services.AddScoped<CostumePdfService>();
+builder.Services.AddScoped<QuickChangePdfService>();
+builder.Services.AddScoped<CostumePlotPdfService>();
 builder.Services.AddScoped<PropsPdfService>();
 // AI suggestions via Google Gemini (free tier): rehearsal schedules + formations.
 builder.Services.AddHttpClient();

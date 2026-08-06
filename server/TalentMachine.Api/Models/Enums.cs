@@ -65,3 +65,15 @@ public enum PropStatus
     Sourced,
     Ready,
 }
+
+/// <summary>
+/// Where a costume is in the gathering process (mirrors <see cref="PropStatus"/>).
+/// Per-kid fitting is tracked separately on CostumeAssignment.IsFitted.
+/// Default = Needed.
+/// </summary>
+public enum CostumeStatus
+{
+    Needed,
+    Sourced,
+    Ready,
+}

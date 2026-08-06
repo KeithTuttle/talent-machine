@@ -268,6 +268,16 @@ export interface DashboardAttendance {
   avgPercent: number
   atRisk: DashboardAtRisk[]
 }
+export interface DashboardCostumes {
+  total: number
+  ready: number
+  sourced: number
+  needed: number
+  fittingsDone: number
+  fittingsTotal: number
+  /** Back-to-back changes — the ones that need a dresser. */
+  quickChanges: number
+}
 export interface Dashboard {
   productionId: number
   title: string
@@ -275,6 +285,7 @@ export interface Dashboard {
   rollups: DashboardRollups
   thisWeek: DashboardWeekSlot[]
   attendance: DashboardAttendance
+  costumes: DashboardCostumes
 }
 
 export interface Formation {
@@ -288,11 +299,16 @@ export interface Formation {
 
 export type CostumeGender = 'All' | 'Boys' | 'Girls'
 
+export type CostumeStatus = 'Needed' | 'Sourced' | 'Ready'
+export const COSTUME_STATUSES: CostumeStatus[] = ['Needed', 'Sourced', 'Ready']
+
 export interface CostumePiece {
   id: number
   musicalNumberId: number
   /** Short name for this look (e.g. "Bear", "Soldier"); null = unnamed. */
   label?: string | null
+  /** Where this costume is in the gathering process. */
+  status: CostumeStatus
   gender: CostumeGender
   description?: string | null
   accessories?: string | null
@@ -309,6 +325,8 @@ export interface CostumeAssignment {
   costumePieceId?: number | null
   size?: string | null
   notes?: string | null
+  /** Has this performer been fitted in it? */
+  isFitted?: boolean
 }
 
 export interface Guardian {

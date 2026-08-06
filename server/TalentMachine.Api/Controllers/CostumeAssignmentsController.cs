@@ -47,6 +47,7 @@ public class CostumeAssignmentsController : ControllerBase
             existing.CostumePieceId = input.CostumePieceId;
             existing.Size = input.Size;
             existing.Notes = input.Notes;
+            existing.IsFitted = input.IsFitted;
             await _db.SaveChangesAsync();
             return Ok(existing);
         }

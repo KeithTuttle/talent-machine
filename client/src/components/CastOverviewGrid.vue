@@ -35,6 +35,8 @@ const emit = defineEmits<{
   openMember: [member: CastMembership]
   openNumber: [number: MusicalNumber]
   costumePdf: []
+  quickChangePdf: []
+  costumePlotPdf: []
 }>()
 
 const PREFS_KEY = 'planner.gridPrefs'
@@ -183,9 +185,6 @@ const costumeSummary = computed(() => {
   }))
 })
 
-const castOf = (numberId: number) =>
-  new Set(props.numberCasts.filter((c) => c.musicalNumberId === numberId).map((c) => c.performerId))
-
 const pieceById = computed(() => {
   const m = new Map<number, CostumePiece>()
   for (const p of props.costumePieces) m.set(p.id, p)
@@ -199,7 +198,7 @@ const assignmentByKey = computed(() => {
 
 /** A performer's costume in a number: the name of the look they're assigned to,
  * falling back to the number's costume label when they have no look. Empty string
- * = unknown (don't compare). This is what makes quick-change per-performer: a kid
+ * = unknown (don't compare). This is what makes changes per-performer: a kid
  * who stays a "Bear" across two numbers isn't flagged even if the numbers' overall
  * labels differ, and only the kids who actually change are listed. */
 function costumeIdentity(n: MusicalNumber, performerId: number): string {
@@ -212,28 +211,67 @@ function costumeIdentity(n: MusicalNumber, performerId: number): string {
   return n.costumeLabel?.trim().toLowerCase() ?? ''
 }
 
-/** Adjacent numbers in running order (same act) where a shared kid's own costume
- * differs between them → a quick change, listing only the kids who change. */
-const quickChanges = computed(() => {
-  const out: { a: MusicalNumber; b: MusicalNumber; performers: string[] }[] = []
+interface CostumeChange {
+  a: MusicalNumber
+  b: MusicalNumber
+  performers: string[]
+  /** Numbers of the running order between the two; 0 = back-to-back. */
+  buffer: number
+}
+
+/**
+ * Every costume change in the show, per performer — comparing each kid's
+ * CONSECUTIVE APPEARANCES, not just adjacent numbers, so a change with a number
+ * of breathing room in between is still caught (just ranked calmer). An act break
+ * between them means an intermission, so it never counts.
+ *
+ * Mirrors Services/CostumeChanges.cs on the server (used by the printed sheets) —
+ * keep the two in step.
+ */
+const costumeChanges = computed<CostumeChange[]>(() => {
   const list = orderedNumbers.value
-  for (let i = 0; i < list.length - 1; i++) {
-    const a = list[i], b = list[i + 1]
-    // An act break sits between them → not back-to-back on stage, so no quick
-    // change. (Only when both are actually placed in acts; act-less shows still flag.)
-    if (a.actId != null && b.actId != null && a.actId !== b.actId) continue
-    const setB = castOf(b.id)
-    const shared = [...castOf(a.id)].filter((id) => setB.has(id))
-    const changers = shared.filter((id) => {
-      const ia = costumeIdentity(a, id)
-      const ib = costumeIdentity(b, id)
-      return ia !== '' && ib !== '' && ia !== ib
-    })
-    if (changers.length > 0)
-      out.push({ a, b, performers: changers.map((id) => props.performerName(id)).sort() })
+  const position = new Map(list.map((n, i) => [n.id, i]))
+  // Group by the pair of numbers so kids changing at the same moment share a row.
+  const byMoment = new Map<string, CostumeChange>()
+
+  for (const m of props.cast) {
+    const pid = m.performerId
+    const appearances = list.filter((n) => isCast(n.id, pid))
+    for (let i = 0; i < appearances.length - 1; i++) {
+      const a = appearances[i], b = appearances[i + 1]
+      if (a.actId != null && b.actId != null && a.actId !== b.actId) continue
+      const ia = costumeIdentity(a, pid)
+      const ib = costumeIdentity(b, pid)
+      if (ia === '' || ib === '' || ia === ib) continue
+
+      const key = `${a.id}:${b.id}`
+      const existing = byMoment.get(key)
+      const name = props.performerName(pid)
+      if (existing) existing.performers.push(name)
+      else
+        byMoment.set(key, {
+          a, b, performers: [name],
+          buffer: (position.get(b.id) ?? 0) - (position.get(a.id) ?? 0) - 1,
+        })
+    }
   }
-  return out
+
+  return [...byMoment.values()]
+    .map((c) => ({ ...c, performers: c.performers.sort() }))
+    .sort((x, y) => x.buffer - y.buffer || (position.get(x.a.id) ?? 0) - (position.get(y.a.id) ?? 0))
 })
+
+/** Back-to-back changes — the ones that actually need a dresser standing by. */
+const quickChangeCount = computed(() => costumeChanges.value.filter((c) => c.buffer === 0).length)
+
+const bufferLabel = (buffer: number) =>
+  buffer === 0 ? 'back-to-back' : buffer === 1 ? '1 number' : `${buffer} numbers`
+const bufferClass = (buffer: number) =>
+  buffer === 0
+    ? 'bg-destructive/15 text-destructive'
+    : buffer === 1
+      ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400'
+      : 'bg-muted text-muted-foreground'
 </script>
 
 <template>
@@ -249,12 +287,29 @@ const quickChanges = computed(() => {
         <SlidersHorizontal class="h-3.5 w-3.5" /> Filters
         <component :is="filtersOpen ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
       </button>
-      <button
-        class="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-accent"
-        @click="emit('costumePdf')"
-      >
-        <FileDown class="h-3.5 w-3.5" /> Costume PDF
-      </button>
+      <div class="ml-auto flex flex-wrap items-center gap-1.5">
+        <button
+          class="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-accent"
+          title="Every number in running order with its costumes and who wears them"
+          @click="emit('costumePdf')"
+        >
+          <FileDown class="h-3.5 w-3.5" /> Costume sheet
+        </button>
+        <button
+          class="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-accent"
+          title="The dressers' wing sheet — every change, most urgent first"
+          @click="emit('quickChangePdf')"
+        >
+          <FileDown class="h-3.5 w-3.5" /> Quick changes
+        </button>
+        <button
+          class="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-accent"
+          title="One block per kid — what they wear, in order"
+          @click="emit('costumePlotPdf')"
+        >
+          <FileDown class="h-3.5 w-3.5" /> Per-kid plot
+        </button>
+      </div>
     </div>
 
     <template v-if="filtersOpen">
@@ -402,13 +457,20 @@ const quickChanges = computed(() => {
           <h3 class="text-xs font-semibold uppercase tracking-wide text-destructive">Not yet cast ({{ notYetCast.length }})</h3>
           <p class="mt-1 text-xs text-muted-foreground">{{ notYetCast.map((m) => performerName(m.performerId)).join(', ') }}</p>
         </div>
-        <div v-if="quickChanges.length > 0" class="rounded-lg border border-border p-3">
+        <div v-if="costumeChanges.length > 0" class="rounded-lg border border-border p-3">
           <h3 class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-orange-600 dark:text-orange-400">
-            <AlertTriangle class="h-3.5 w-3.5" /> Quick changes ({{ quickChanges.length }})
+            <AlertTriangle class="h-3.5 w-3.5" /> Costume changes ({{ costumeChanges.length }})
+            <span v-if="quickChangeCount > 0" class="font-normal normal-case text-muted-foreground">
+              — {{ quickChangeCount }} back-to-back
+            </span>
           </h3>
-          <ul class="mt-1 space-y-0.5 text-xs text-muted-foreground">
-            <li v-for="(qc, i) in quickChanges" :key="i">
-              <span class="font-medium text-foreground">{{ qc.a.title }} → {{ qc.b.title }}</span>: {{ qc.performers.join(', ') }}
+          <ul class="mt-1.5 space-y-1 text-xs text-muted-foreground">
+            <li v-for="(cc, i) in costumeChanges" :key="i" class="flex flex-wrap items-baseline gap-x-1.5">
+              <span class="rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide" :class="bufferClass(cc.buffer)">
+                {{ bufferLabel(cc.buffer) }}
+              </span>
+              <span class="font-medium text-foreground">{{ cc.a.title }} → {{ cc.b.title }}</span>
+              <span>{{ cc.performers.join(', ') }}</span>
             </li>
           </ul>
         </div>

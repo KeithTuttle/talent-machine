@@ -81,19 +81,24 @@ const costumeLabels = computed(() =>
   [...new Set(numbers.value.map((n) => n.costumeLabel?.trim()).filter((l): l is string => !!l))].sort(),
 )
 
-async function downloadCostumePdf() {
+/** Fetch a costume-related PDF and hand it to the browser as a download. */
+async function downloadPdf(path: string, filename: string) {
   try {
-    const { data } = await api.get(`/costumes/pdf?productionId=${scope.selectedProductionId}`, { responseType: 'blob' })
+    const { data } = await api.get(`${path}?productionId=${scope.selectedProductionId}`, { responseType: 'blob' })
     const url = URL.createObjectURL(data as Blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'costumes.pdf'
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
   } catch {
-    toast.error("Couldn't generate the costume PDF — is the server running?")
+    toast.error("Couldn't generate the PDF — is the server running?")
   }
 }
+
+const downloadCostumePdf = () => downloadPdf('/costumes/pdf', 'costumes.pdf')
+const downloadQuickChangePdf = () => downloadPdf('/costumes/quickchanges/pdf', 'quick-changes.pdf')
+const downloadCostumePlotPdf = () => downloadPdf('/costumes/plot/pdf', 'costume-plot.pdf')
 
 // --- Loading -----------------------------------------------------------------
 
@@ -581,6 +586,8 @@ async function deleteRole(role: Role) {
           @open-member="drawerMember = $event"
           @open-number="drawerNumber = $event"
           @costume-pdf="downloadCostumePdf"
+          @quick-change-pdf="downloadQuickChangePdf"
+          @costume-plot-pdf="downloadCostumePlotPdf"
         />
       </div>
 

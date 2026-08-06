@@ -74,6 +74,7 @@ public class AppDbContext : DbContext
         b.Entity<ProductionStaff>().Property(x => x.Role).HasConversion<string>();
         b.Entity<MusicalNumber>().Property(x => x.TeachStatus).HasConversion<string>();
         b.Entity<CostumePiece>().Property(x => x.Gender).HasConversion<string>();
+        b.Entity<CostumePiece>().Property(x => x.Status).HasConversion<string>();
         b.Entity<Prop>().Property(x => x.Status).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
