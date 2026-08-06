@@ -310,15 +310,17 @@ async function scheduleBlocking(scene: Scene) {
       musicalNumberId: null,
       notes: `Blocking — ${scene.name}${scene.setting ? ` (${scene.setting})` : ''}`,
     })
-    await Promise.all(
-      ids.map((performerId) =>
-        api.post('/rehearsalattendees', {
-          rehearsalId: rehearsal.id,
-          performerId,
-          isExcluded: false,
-        }),
-      ),
-    )
+    // Add attendees one at a time rather than firing the whole batch at once:
+    // a cold/free-tier server (Render spins down when idle) gets slammed by a
+    // parallel burst and fails several requests, spraying error toasts. Serial
+    // requests ride through a warming server and surface at most one error.
+    for (const performerId of ids) {
+      await api.post('/rehearsalattendees', {
+        rehearsalId: rehearsal.id,
+        performerId,
+        isExcluded: false,
+      })
+    }
     toast.success(`Blocking rehearsal created with ${ids.length} in the room — set the date in Rehearsals.`)
   } catch {
     toast.error("Couldn't create the rehearsal — is the server running?")
