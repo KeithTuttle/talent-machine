@@ -9,7 +9,15 @@ import { AlertTriangle, ChevronDown, ChevronRight, FileDown, SlidersHorizontal }
 import ColorDot from '@/components/ColorDot.vue'
 import { GENDER_COLORS, GENDER_FALLBACK, costumeColorMap, tint } from '@/lib/colors'
 import { teachIcon } from '@/lib/teach'
-import type { Act, CastGroup, CastMembership, MusicalNumber, NumberCast } from '@/types'
+import type {
+  Act,
+  CastGroup,
+  CastMembership,
+  CostumeAssignment,
+  CostumePiece,
+  MusicalNumber,
+  NumberCast,
+} from '@/types'
 
 const props = defineProps<{
   numbers: MusicalNumber[]
@@ -17,6 +25,8 @@ const props = defineProps<{
   cast: CastMembership[]
   groups: CastGroup[]
   numberCasts: NumberCast[]
+  costumePieces: CostumePiece[]
+  costumeAssignments: CostumeAssignment[]
   performerName: (id: number) => string
   performerAge: (id: number) => number | null
 }>()
@@ -176,8 +186,34 @@ const costumeSummary = computed(() => {
 const castOf = (numberId: number) =>
   new Set(props.numberCasts.filter((c) => c.musicalNumberId === numberId).map((c) => c.performerId))
 
-/** Adjacent numbers in running order that share a kid AND have different costume
- * labels (both non-empty) → a quick change. */
+const pieceById = computed(() => {
+  const m = new Map<number, CostumePiece>()
+  for (const p of props.costumePieces) m.set(p.id, p)
+  return m
+})
+const assignmentByKey = computed(() => {
+  const m = new Map<string, CostumeAssignment>()
+  for (const a of props.costumeAssignments) m.set(`${a.musicalNumberId}:${a.performerId}`, a)
+  return m
+})
+
+/** A performer's costume in a number: the name of the look they're assigned to,
+ * falling back to the number's costume label when they have no look. Empty string
+ * = unknown (don't compare). This is what makes quick-change per-performer: a kid
+ * who stays a "Bear" across two numbers isn't flagged even if the numbers' overall
+ * labels differ, and only the kids who actually change are listed. */
+function costumeIdentity(n: MusicalNumber, performerId: number): string {
+  const a = assignmentByKey.value.get(`${n.id}:${performerId}`)
+  if (a?.costumePieceId != null) {
+    const p = pieceById.value.get(a.costumePieceId)
+    const look = p?.label?.trim() || p?.description?.trim()
+    if (look) return look.toLowerCase()
+  }
+  return n.costumeLabel?.trim().toLowerCase() ?? ''
+}
+
+/** Adjacent numbers in running order (same act) where a shared kid's own costume
+ * differs between them → a quick change, listing only the kids who change. */
 const quickChanges = computed(() => {
   const out: { a: MusicalNumber; b: MusicalNumber; performers: string[] }[] = []
   const list = orderedNumbers.value
@@ -186,13 +222,15 @@ const quickChanges = computed(() => {
     // An act break sits between them → not back-to-back on stage, so no quick
     // change. (Only when both are actually placed in acts; act-less shows still flag.)
     if (a.actId != null && b.actId != null && a.actId !== b.actId) continue
-    const la = a.costumeLabel?.trim().toLowerCase()
-    const lb = b.costumeLabel?.trim().toLowerCase()
-    if (!la || !lb || la === lb) continue
     const setB = castOf(b.id)
     const shared = [...castOf(a.id)].filter((id) => setB.has(id))
-    if (shared.length > 0)
-      out.push({ a, b, performers: shared.map((id) => props.performerName(id)).sort() })
+    const changers = shared.filter((id) => {
+      const ia = costumeIdentity(a, id)
+      const ib = costumeIdentity(b, id)
+      return ia !== '' && ib !== '' && ia !== ib
+    })
+    if (changers.length > 0)
+      out.push({ a, b, performers: changers.map((id) => props.performerName(id)).sort() })
   }
   return out
 })

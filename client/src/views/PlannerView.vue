@@ -30,6 +30,8 @@ import type {
   Act,
   CastGroup,
   CastMembership,
+  CostumeAssignment,
+  CostumePiece,
   Gender,
   MusicalNumber,
   NumberCast,
@@ -57,6 +59,8 @@ const numberCasts = ref<NumberCast[]>([])
 const performers = ref<Performer[]>([])
 const sceneChars = ref<SceneCharacter[]>([])
 const numberChars = ref<NumberCharacter[]>([])
+const costumePieces = ref<CostumePiece[]>([])
+const costumeAssignments = ref<CostumeAssignment[]>([])
 
 const selectedNumberId = ref<number | null>(null)
 const sideTab = ref<'cast' | 'groups' | 'roles'>('cast')
@@ -112,6 +116,8 @@ async function loadAll() {
     numberCasts.value = []
     sceneChars.value = []
     numberChars.value = []
+    costumePieces.value = []
+    costumeAssignments.value = []
     return
   }
   ;[
@@ -124,6 +130,8 @@ async function loadAll() {
     performers.value,
     sceneChars.value,
     numberChars.value,
+    costumePieces.value,
+    costumeAssignments.value,
   ] = await Promise.all([
     safeGet<MusicalNumber>(`/numbers?productionId=${pid}`),
     safeGet<Act>(`/acts?productionId=${pid}`),
@@ -134,9 +142,22 @@ async function loadAll() {
     safeGet<Performer>('/performers'),
     safeGet<SceneCharacter>(`/scenecharacters?productionId=${pid}`),
     safeGet<NumberCharacter>(`/numbercharacters?productionId=${pid}`),
+    safeGet<CostumePiece>(`/costumepieces?productionId=${pid}`),
+    safeGet<CostumeAssignment>(`/costumeassignments?productionId=${pid}`),
   ])
   if (!numbers.value.some((n) => n.id === selectedNumberId.value))
     selectedNumberId.value = numbers.value[0]?.id ?? null
+}
+
+/** Refresh costume pieces/assignments after the number drawer edits looks, so the
+ * overview's per-performer quick-change stays accurate without a full reload. */
+async function reloadCostumes() {
+  const pid = scope.selectedProductionId
+  if (pid === null) return
+  ;[costumePieces.value, costumeAssignments.value] = await Promise.all([
+    safeGet<CostumePiece>(`/costumepieces?productionId=${pid}`),
+    safeGet<CostumeAssignment>(`/costumeassignments?productionId=${pid}`),
+  ])
 }
 
 onMounted(() => {
@@ -552,6 +573,8 @@ async function deleteRole(role: Role) {
           :cast="cast"
           :groups="groups"
           :number-casts="numberCasts"
+          :costume-pieces="costumePieces"
+          :costume-assignments="costumeAssignments"
           :performer-name="performerName"
           :performer-age="performerAge"
           @toggle="toggleCastFor"
@@ -966,7 +989,7 @@ async function deleteRole(role: Role) {
       :performers="performers"
       :number-casts="numberCasts"
       :costume-labels="costumeLabels"
-      @close="drawerNumber = null"
+      @close="drawerNumber = null; reloadCostumes()"
       @toggle-cast="toggleCastFor"
     />
   </div>
