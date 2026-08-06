@@ -6,6 +6,7 @@
 import { computed, ref, watch } from 'vue'
 import { Plus, Trash2, X } from 'lucide-vue-next'
 import { api } from '@/lib/api'
+import { toast } from '@/lib/toast'
 import { useStaffStore } from '@/stores/staff'
 import StaffPicker from '@/components/StaffPicker.vue'
 import ColorDot from '@/components/ColorDot.vue'
@@ -110,8 +111,14 @@ async function setTeach(e: Event) {
 }
 async function setChoreographer(staffId: number | null) {
   if (!props.number) return
+  const prev = props.number.choreographerStaffId ?? null
   props.number.choreographerStaffId = staffId
-  await saveNumber()
+  try {
+    await api.put(`/numbers/${props.number.id}`, { ...props.number, choreographer: undefined })
+  } catch {
+    props.number.choreographerStaffId = prev
+    toast.error("Couldn't save the choreographer — please try again.")
+  }
 }
 function useCostumeLabel(label: string) {
   if (!props.number) return
@@ -163,7 +170,7 @@ async function saveAssignment(performerId: number, patch: Partial<CostumeAssignm
   if (!props.number) return
   let a = assignmentOf(performerId)
   if (!a) {
-    a = { id: 0, musicalNumberId: props.number.id, performerId, size: null, notes: null }
+    a = { id: 0, musicalNumberId: props.number.id, performerId, costumePieceId: null, size: null, notes: null }
     assignments.value.push(a)
   }
   Object.assign(a, patch)
@@ -171,11 +178,16 @@ async function saveAssignment(performerId: number, patch: Partial<CostumeAssignm
     id: a.id,
     musicalNumberId: props.number.id,
     performerId,
+    costumePieceId: a.costumePieceId ?? null,
     size: a.size ?? null,
     notes: a.notes ?? null,
   })
   a.id = data.id
 }
+
+/** Display name for a look in the per-kid picker. */
+const lookLabel = (p: CostumePiece) =>
+  p.label?.trim() || p.description?.trim() || (p.gender !== 'All' ? p.gender : 'Costume')
 
 async function addExtra(e: Event) {
   const pid = Number((e.target as HTMLSelectElement).value)
@@ -301,6 +313,7 @@ const castPerformers = computed(() =>
             </div>
             <div v-for="p in pieces" :key="p.id" class="space-y-1.5 rounded-md border border-border p-2.5">
               <div class="flex items-center gap-2">
+                <input v-model="p.label" placeholder="Look (e.g. Bear)" class="w-28 shrink-0 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium focus:outline-none" title="Name this look so you can assign kids to it" @change="savePiece(p)" />
                 <select v-model="p.gender" class="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none" @change="savePiece(p)">
                   <option v-for="g in GENDERS" :key="g" :value="g">{{ g }}</option>
                 </select>
@@ -324,6 +337,16 @@ const castPerformers = computed(() =>
                 {{ performerName(pid) }}
                 <span v-if="!isCast(pid)" class="text-xs text-orange-600 dark:text-orange-400" title="On stage, not in the number">(extra)</span>
               </span>
+              <select
+                v-if="pieces.length"
+                :value="assignmentOf(pid)?.costumePieceId ?? ''"
+                class="w-24 rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none"
+                title="Which look this performer wears"
+                @change="saveAssignment(pid, { costumePieceId: ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null })"
+              >
+                <option value="">Look…</option>
+                <option v-for="p in pieces" :key="p.id" :value="p.id">{{ lookLabel(p) }}</option>
+              </select>
               <input :value="assignmentOf(pid)?.size ?? ''" placeholder="Size" class="w-20 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveAssignment(pid, { size: ($event.target as HTMLInputElement).value || null })" />
               <input :value="assignmentOf(pid)?.notes ?? ''" placeholder="Alteration notes" class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveAssignment(pid, { notes: ($event.target as HTMLInputElement).value || null })" />
               <button v-if="!isCast(pid)" class="rounded p-1 text-muted-foreground hover:text-destructive" title="Remove extra" @click="removeAssignment(pid)"><X class="h-3.5 w-3.5" /></button>

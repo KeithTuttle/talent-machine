@@ -5,7 +5,7 @@
 // highlight, teach-status icons, a legend, and a costume summary + quick-change
 // panel below. Click a name → member drawer; click a number → number drawer.
 import { computed, ref, watch } from 'vue'
-import { AlertTriangle, FileDown } from 'lucide-vue-next'
+import { AlertTriangle, ChevronDown, ChevronRight, FileDown, SlidersHorizontal } from 'lucide-vue-next'
 import ColorDot from '@/components/ColorDot.vue'
 import { GENDER_COLORS, GENDER_FALLBACK, costumeColorMap, tint } from '@/lib/colors'
 import { teachIcon } from '@/lib/teach'
@@ -30,19 +30,28 @@ const emit = defineEmits<{
 const PREFS_KEY = 'planner.gridPrefs'
 const stored = (() => {
   try {
-    return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as { hiddenRowGroups?: (number | null)[] }
+    return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as {
+      hiddenRowGroups?: (number | null)[]
+      filtersOpen?: boolean
+    }
   } catch {
     return {}
   }
 })()
 
 const hiddenRowGroups = ref<(number | null)[]>(stored.hiddenRowGroups ?? [])
+const filtersOpen = ref<boolean>(stored.filtersOpen ?? true)
 const search = ref('')
 const hoveredNumberId = ref<number | null>(null)
 
-watch(hiddenRowGroups, () => {
-  localStorage.setItem(PREFS_KEY, JSON.stringify({ hiddenRowGroups: hiddenRowGroups.value }))
-}, { deep: true })
+function savePrefs() {
+  localStorage.setItem(
+    PREFS_KEY,
+    JSON.stringify({ hiddenRowGroups: hiddenRowGroups.value, filtersOpen: filtersOpen.value }),
+  )
+}
+watch(hiddenRowGroups, savePrefs, { deep: true })
+watch(filtersOpen, savePrefs)
 
 // --- Columns: running order (act headers when acts exist) --------------------
 
@@ -174,6 +183,9 @@ const quickChanges = computed(() => {
   const list = orderedNumbers.value
   for (let i = 0; i < list.length - 1; i++) {
     const a = list[i], b = list[i + 1]
+    // An act break sits between them → not back-to-back on stage, so no quick
+    // change. (Only when both are actually placed in acts; act-less shows still flag.)
+    if (a.actId != null && b.actId != null && a.actId !== b.actId) continue
     const la = a.costumeLabel?.trim().toLowerCase()
     const lb = b.costumeLabel?.trim().toLowerCase()
     if (!la || !lb || la === lb) continue
@@ -188,22 +200,16 @@ const quickChanges = computed(() => {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col gap-3">
-    <!-- Controls -->
-    <div class="flex flex-wrap items-center gap-2">
-      <input
-        v-model="search"
-        placeholder="Find a kid…"
-        class="min-w-36 rounded-md border border-border bg-background px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-      />
+    <!-- Filter toggle (always visible so the grid can take the full height) -->
+    <div class="flex items-center gap-2">
       <button
-        v-for="g in rowGroups"
-        :key="g.key ?? 'ungrouped'"
-        class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
-        :class="hiddenRowGroups.includes(g.key) ? 'border-border text-muted-foreground line-through' : 'border-transparent bg-accent text-accent-foreground'"
-        :title="hiddenRowGroups.includes(g.key) ? `Show ${g.name}` : `Hide ${g.name}`"
-        @click="toggleRowGroup(g.key)"
+        class="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-accent"
+        :aria-expanded="filtersOpen"
+        :title="filtersOpen ? 'Hide filters' : 'Show filters'"
+        @click="filtersOpen = !filtersOpen"
       >
-        <ColorDot :color="g.color" size="sm" /> {{ g.name }}
+        <SlidersHorizontal class="h-3.5 w-3.5" /> Filters
+        <component :is="filtersOpen ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
       </button>
       <button
         class="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-accent"
@@ -213,15 +219,36 @@ const quickChanges = computed(() => {
       </button>
     </div>
 
-    <!-- Legend -->
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-      <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full" :style="{ background: GENDER_COLORS.Male }" /> boy</span>
-      <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full" :style="{ background: GENDER_COLORS.Female }" /> girl</span>
-      <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full" :style="{ background: GENDER_FALLBACK }" /> other</span>
-      <span class="flex items-center gap-1"><AlertTriangle class="h-3.5 w-3.5 text-orange-500" /> heavily cast</span>
-      <span v-if="hasCostumes" class="flex items-center gap-1"><span class="inline-block h-2.5 w-4 rounded-sm bg-muted-foreground/40" /> costume (same color = same costume)</span>
-      <span class="ml-auto italic">Click a cell to cast · a name for details · a number to open it</span>
-    </div>
+    <template v-if="filtersOpen">
+      <!-- Controls -->
+      <div class="flex flex-wrap items-center gap-2">
+        <input
+          v-model="search"
+          placeholder="Find a kid…"
+          class="min-w-36 rounded-md border border-border bg-background px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <button
+          v-for="g in rowGroups"
+          :key="g.key ?? 'ungrouped'"
+          class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+          :class="hiddenRowGroups.includes(g.key) ? 'border-border text-muted-foreground line-through' : 'border-transparent bg-accent text-accent-foreground'"
+          :title="hiddenRowGroups.includes(g.key) ? `Show ${g.name}` : `Hide ${g.name}`"
+          @click="toggleRowGroup(g.key)"
+        >
+          <ColorDot :color="g.color" size="sm" /> {{ g.name }}
+        </button>
+      </div>
+
+      <!-- Legend -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full" :style="{ background: GENDER_COLORS.Male }" /> boy</span>
+        <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full" :style="{ background: GENDER_COLORS.Female }" /> girl</span>
+        <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full" :style="{ background: GENDER_FALLBACK }" /> other</span>
+        <span class="flex items-center gap-1"><AlertTriangle class="h-3.5 w-3.5 text-orange-500" /> heavily cast</span>
+        <span v-if="hasCostumes" class="flex items-center gap-1"><span class="inline-block h-2.5 w-4 rounded-sm bg-muted-foreground/40" /> costume (same color = same costume)</span>
+        <span class="ml-auto italic">Click a cell to cast · a name for details · a number to open it</span>
+      </div>
+    </template>
 
     <p v-if="cast.length === 0 || numbers.length === 0" class="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
       {{ cast.length === 0 ? 'Add performers to the cast first (Plan view).' : 'Add numbers first (Plan view).' }}

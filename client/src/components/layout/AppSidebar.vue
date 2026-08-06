@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
 import { useScopeStore } from '@/stores/scope'
@@ -19,6 +19,7 @@ import {
   Building2,
   Check,
   ChevronDown,
+  ChevronRight,
   Plus,
   Pencil,
   Trash2,
@@ -40,6 +41,11 @@ const router = useRouter()
 const collapsed = ref(false) // desktop icon-only mode
 const authEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 const switcherOpen = ref(false)
+// Collapsible "Workspace" section (company + season + production) — frees room
+// for the nav once the user has picked what they're working on. Persisted.
+const WORKSPACE_KEY = 'sidebar.workspaceOpen'
+const workspaceOpen = ref(localStorage.getItem(WORKSPACE_KEY) !== '0')
+watch(workspaceOpen, (v) => localStorage.setItem(WORKSPACE_KEY, v ? '1' : '0'))
 
 async function switchTo(id: number) {
   switcherOpen.value = false
@@ -136,8 +142,22 @@ function onProductionChange(e: Event) {
       </button>
     </div>
 
+    <!-- Workspace: company + season + production, collapsible for more nav room -->
+    <div v-if="!collapsed" class="border-b border-border">
+      <button
+        class="flex w-full items-center gap-1.5 px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+        :aria-expanded="workspaceOpen"
+        @click="workspaceOpen = !workspaceOpen"
+      >
+        <component :is="workspaceOpen ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
+        Workspace
+        <span v-if="!workspaceOpen" class="ml-auto max-w-[9rem] truncate font-normal normal-case text-muted-foreground">
+          {{ scope.selectedProduction?.title ?? scope.selectedSeason?.name ?? '' }}
+        </span>
+      </button>
+      <div v-show="workspaceOpen">
     <!-- Company switcher (only with auth on; a user may belong to several) -->
-    <div v-if="authEnabled && !collapsed" class="relative border-b border-border p-2">
+    <div v-if="authEnabled" class="relative p-2">
       <button
         class="flex w-full items-center gap-2 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent"
         @click="switcherOpen = !switcherOpen"
@@ -188,7 +208,7 @@ function onProductionChange(e: Event) {
     </div>
 
     <!-- Season + production pickers -->
-    <div v-if="!collapsed" class="space-y-2 border-b border-border p-3">
+    <div class="space-y-2 p-3 pt-1">
       <label class="block space-y-1">
         <span class="text-xs font-medium text-muted-foreground">Season</span>
         <select
@@ -217,6 +237,8 @@ function onProductionChange(e: Event) {
           </option>
         </select>
       </label>
+    </div>
+      </div>
     </div>
 
     <!-- Nav -->

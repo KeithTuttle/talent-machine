@@ -291,6 +291,8 @@ export type CostumeGender = 'All' | 'Boys' | 'Girls'
 export interface CostumePiece {
   id: number
   musicalNumberId: number
+  /** Short name for this look (e.g. "Bear", "Soldier"); null = unnamed. */
+  label?: string | null
   gender: CostumeGender
   description?: string | null
   accessories?: string | null
@@ -303,6 +305,8 @@ export interface CostumeAssignment {
   id: number
   musicalNumberId: number
   performerId: number
+  /** Which costume piece/look this performer wears; null = unassigned. */
+  costumePieceId?: number | null
   size?: string | null
   notes?: string | null
 }

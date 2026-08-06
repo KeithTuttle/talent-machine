@@ -44,6 +44,7 @@ public class CostumeAssignmentsController : ControllerBase
             a => a.MusicalNumberId == input.MusicalNumberId && a.PerformerId == input.PerformerId);
         if (existing is not null)
         {
+            existing.CostumePieceId = input.CostumePieceId;
             existing.Size = input.Size;
             existing.Notes = input.Notes;
             await _db.SaveChangesAsync();

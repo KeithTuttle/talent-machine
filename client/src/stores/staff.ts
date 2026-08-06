@@ -17,18 +17,42 @@ export const useStaffStore = defineStore('staff', () => {
     loaded.value = true
   }
 
-  async function create(input: { name: string; email?: string | null; phone?: string | null }) {
+  async function create(input: {
+    name: string
+    email?: string | null
+    phone?: string | null
+    notes?: string | null
+  }) {
     const { data } = await api.post<StaffMember>('/staffmembers', {
       id: 0,
       name: input.name.trim(),
       email: input.email?.trim() || null,
       phone: input.phone?.trim() || null,
+      notes: input.notes?.trim() || null,
     })
     members.value.push(data)
     return data
   }
 
+  /** Persist edits to a directory person (name/email/phone/notes). */
+  async function update(member: StaffMember) {
+    await api.put(`/staffmembers/${member.id}`, {
+      id: member.id,
+      name: member.name.trim(),
+      email: member.email?.trim() || null,
+      phone: member.phone?.trim() || null,
+      notes: member.notes?.trim() || null,
+    })
+    const i = members.value.findIndex((m) => m.id === member.id)
+    if (i !== -1) members.value[i] = { ...member }
+  }
+
+  async function remove(id: number) {
+    await api.delete(`/staffmembers/${id}`)
+    members.value = members.value.filter((m) => m.id !== id)
+  }
+
   const byId = (id: number) => members.value.find((m) => m.id === id) ?? null
 
-  return { members, loaded, fetch, create, byId }
+  return { members, loaded, fetch, create, update, remove, byId }
 })

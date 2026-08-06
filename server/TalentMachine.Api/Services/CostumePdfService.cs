@@ -116,25 +116,65 @@ public class CostumePdfService
                 });
             }
 
-            // Who wears it: cast + on-stage extras, with sizes/notes.
+            // Who wears it: cast + on-stage extras, with sizes/notes. When looks are
+            // in use (different costumes in one number), group wearers by their look.
             var byPerformer = assignments.ToDictionary(a => a.PerformerId);
             var wearerIds = cast.Union(assignments.Select(a => a.PerformerId)).ToList();
             if (wearerIds.Count > 0)
             {
                 col.Item().PaddingTop(6).Text("Who wears it").FontSize(9).SemiBold().FontColor(Colors.Grey.Darken2);
-                foreach (var id in wearerIds.OrderBy(id => performerName.GetValueOrDefault(id, $"#{id}")))
+
+                string Named(int id) => performerName.GetValueOrDefault(id, $"#{id}");
+                var looksUsed = pieces.Count > 0
+                    && wearerIds.Any(id => byPerformer.TryGetValue(id, out var a) && a.CostumePieceId is not null);
+
+                if (looksUsed)
                 {
-                    var extra = !cast.Contains(id);
-                    byPerformer.TryGetValue(id, out var a);
-                    col.Item().Text(t =>
+                    foreach (var piece in pieces)
                     {
-                        t.Span($"• {performerName.GetValueOrDefault(id, $"#{id}")}").FontColor(Colors.Grey.Darken4);
-                        if (extra) t.Span("  (on stage, not in number)").FontSize(8).FontColor(Colors.Orange.Darken2);
-                        if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  — size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
-                        if (!string.IsNullOrWhiteSpace(a?.Notes)) t.Span($"  ({a!.Notes})").FontSize(9).Italic().FontColor(Colors.Grey.Medium);
-                    });
+                        var ids = wearerIds
+                            .Where(id => byPerformer.TryGetValue(id, out var a) && a.CostumePieceId == piece.Id)
+                            .OrderBy(Named).ToList();
+                        if (ids.Count == 0) continue;
+                        col.Item().PaddingTop(3).Text(LookName(piece)).FontSize(9).SemiBold().FontColor(Colors.Grey.Darken3);
+                        foreach (var id in ids) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named));
+                    }
+                    var noLook = wearerIds
+                        .Where(id => !byPerformer.TryGetValue(id, out var a) || a.CostumePieceId is null)
+                        .OrderBy(Named).ToList();
+                    if (noLook.Count > 0)
+                    {
+                        col.Item().PaddingTop(3).Text("No look assigned").FontSize(9).SemiBold().FontColor(Colors.Grey.Medium);
+                        foreach (var id in noLook) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named));
+                    }
+                }
+                else
+                {
+                    foreach (var id in wearerIds.OrderBy(Named))
+                        col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named));
                 }
             }
+        });
+    }
+
+    private static string LookName(CostumePiece p) =>
+        !string.IsNullOrWhiteSpace(p.Label) ? p.Label!
+        : !string.IsNullOrWhiteSpace(p.Description) ? p.Description!
+        : p.Gender != CostumeGender.All ? p.Gender.ToString()
+        : "Costume";
+
+    private void ComposeWearer(
+        IContainer container, int id, HashSet<int> cast,
+        Dictionary<int, CostumeAssignment> byPerformer, Func<int, string> named)
+    {
+        var extra = !cast.Contains(id);
+        byPerformer.TryGetValue(id, out var a);
+        container.Text(t =>
+        {
+            t.Span($"• {named(id)}").FontColor(Colors.Grey.Darken4);
+            if (extra) t.Span("  (on stage, not in number)").FontSize(8).FontColor(Colors.Orange.Darken2);
+            if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  — size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
+            if (!string.IsNullOrWhiteSpace(a?.Notes)) t.Span($"  ({a!.Notes})").FontSize(9).Italic().FontColor(Colors.Grey.Medium);
         });
     }
 
@@ -142,7 +182,10 @@ public class CostumePdfService
     {
         container.Column(col =>
         {
-            var label = p.Gender == CostumeGender.All ? "" : $"[{p.Gender}] ";
+            var lead = new List<string>();
+            if (!string.IsNullOrWhiteSpace(p.Label)) lead.Add(p.Label!.Trim());
+            if (p.Gender != CostumeGender.All) lead.Add($"[{p.Gender}]");
+            var label = lead.Count > 0 ? string.Join(" ", lead) + " " : "";
             col.Item().Text(t =>
             {
                 t.Span(label).SemiBold().FontColor(Colors.Grey.Darken2);

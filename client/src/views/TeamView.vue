@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Copy, Mail, MailCheck, Plus, Trash2, UserMinus, X } from 'lucide-vue-next'
+import { Check, Copy, Mail, MailCheck, Pencil, Plus, Trash2, UserMinus, X } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
@@ -153,6 +153,48 @@ const directory = computed<DirectoryRow[]>(() =>
       hasLogin: !!member.email && memberEmails.value.has(member.email.toLowerCase()),
     })),
 )
+
+// Add / edit / remove directory people (contact book for later use).
+const newStaff = ref({ name: '', email: '', phone: '', notes: '' })
+const editingId = ref<number | null>(null)
+const editBuffer = ref<StaffMember | null>(null)
+
+async function addStaff() {
+  if (!newStaff.value.name.trim()) {
+    toast.error('Enter a name.')
+    return
+  }
+  await staff.create({ ...newStaff.value })
+  newStaff.value = { name: '', email: '', phone: '', notes: '' }
+  toast.success('Added to the directory')
+}
+
+function startEdit(member: StaffMember) {
+  editingId.value = member.id
+  editBuffer.value = { ...member } // edit a copy so Cancel is a true no-op
+}
+function cancelEdit() {
+  editingId.value = null
+  editBuffer.value = null
+}
+async function saveStaff() {
+  if (!editBuffer.value) return
+  await staff.update(editBuffer.value)
+  cancelEdit()
+  toast.success('Saved')
+}
+async function deleteStaff(member: StaffMember) {
+  const ok = await confirm({
+    title: `Remove ${member.name} from the directory?`,
+    message: 'This deletes their contact details and any creative-team assignments on shows.',
+    destructive: true,
+    confirmText: 'Remove',
+  })
+  if (!ok) return
+  await staff.remove(member.id)
+  allAssignments.value = allAssignments.value.filter((a) => a.staffMemberId !== member.id)
+  if (editingId.value === member.id) cancelEdit()
+}
 </script>
 
 <template>
@@ -318,8 +360,44 @@ const directory = computed<DirectoryRow[]>(() =>
         Directory
         <span class="ml-1 font-normal text-muted-foreground">— everyone who's worked with the company</span>
       </h2>
+
+      <!-- Add a person to the contact book -->
+      <form class="space-y-2 border-b border-border p-4" @submit.prevent="addStaff">
+        <div class="flex flex-wrap gap-2">
+          <input
+            v-model="newStaff.name"
+            placeholder="Name"
+            class="min-w-32 flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <input
+            v-model="newStaff.email"
+            type="email"
+            placeholder="Email"
+            class="min-w-40 flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <input
+            v-model="newStaff.phone"
+            placeholder="Phone"
+            class="min-w-32 flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+        <div class="flex gap-2">
+          <input
+            v-model="newStaff.notes"
+            placeholder="Notes (optional)"
+            class="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <button
+            type="submit"
+            class="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            <Plus class="h-4 w-4" /> Add
+          </button>
+        </div>
+      </form>
+
       <p v-if="directory.length === 0" class="p-4 text-sm text-muted-foreground">
-        No people yet. Assign creative team on a show (Seasons &amp; Shows) or send an invite.
+        No people yet. Add someone above, assign creative team on a show (Seasons &amp; Shows), or send an invite.
       </p>
       <ul v-else class="divide-y divide-border">
         <li v-for="row in directory" :key="row.member.id" class="px-4 py-3 text-sm">
@@ -330,6 +408,24 @@ const directory = computed<DirectoryRow[]>(() =>
               <a :href="`mailto:${row.member.email}`" class="text-primary hover:underline">{{ row.member.email }}</a>
             </span>
             <span v-if="row.member.phone" class="text-xs text-muted-foreground">· {{ row.member.phone }}</span>
+            <span class="ml-auto flex items-center gap-1">
+              <button
+                class="rounded p-1 text-muted-foreground hover:text-foreground"
+                :aria-label="`Edit ${row.member.name}`"
+                title="Edit contact details"
+                @click="startEdit(row.member)"
+              >
+                <Pencil class="h-3.5 w-3.5" />
+              </button>
+              <button
+                class="rounded p-1 text-muted-foreground hover:text-destructive"
+                :aria-label="`Remove ${row.member.name}`"
+                title="Remove from directory"
+                @click="deleteStaff(row.member)"
+              >
+                <Trash2 class="h-3.5 w-3.5" />
+              </button>
+            </span>
           </div>
           <div v-if="row.assignments.length > 0" class="mt-1 flex flex-wrap gap-1.5">
             <span
@@ -339,6 +435,37 @@ const directory = computed<DirectoryRow[]>(() =>
             >
               {{ a.role }} · {{ a.title }}
             </span>
+          </div>
+
+          <!-- Inline editor -->
+          <div v-if="editingId === row.member.id && editBuffer" class="mt-2 space-y-2 rounded-md border border-border bg-muted/30 p-3">
+            <div class="flex flex-wrap gap-2">
+              <label class="min-w-32 flex-1 space-y-1">
+                <span class="text-xs text-muted-foreground">Name</span>
+                <input v-model="editBuffer.name" class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+              </label>
+              <label class="min-w-40 flex-1 space-y-1">
+                <span class="text-xs text-muted-foreground">Email</span>
+                <input v-model="editBuffer.email" type="email" class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+              </label>
+              <label class="min-w-32 flex-1 space-y-1">
+                <span class="text-xs text-muted-foreground">Phone</span>
+                <input v-model="editBuffer.phone" class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+              </label>
+            </div>
+            <label class="block space-y-1">
+              <span class="text-xs text-muted-foreground">Notes</span>
+              <textarea v-model="editBuffer.notes" rows="2" class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+            </label>
+            <div class="flex justify-end gap-2">
+              <button class="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent" @click="cancelEdit">Cancel</button>
+              <button
+                class="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+                @click="saveStaff"
+              >
+                <Check class="h-3.5 w-3.5" /> Save
+              </button>
+            </div>
           </div>
         </li>
       </ul>

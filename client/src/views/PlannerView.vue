@@ -30,6 +30,7 @@ import type {
   Act,
   CastGroup,
   CastMembership,
+  Gender,
   MusicalNumber,
   NumberCast,
   NumberCharacter,
@@ -37,6 +38,12 @@ import type {
   Role,
   SceneCharacter,
 } from '@/types'
+
+const genderOptions: { value: Gender; label: string }[] = [
+  { value: 'Male', label: 'Male' },
+  { value: 'Female', label: 'Female' },
+  { value: 'NonBinary', label: 'Non-binary' },
+]
 
 const scope = useScopeStore()
 const staff = useStaffStore()
@@ -144,6 +151,43 @@ const selectedNumber = computed(
   () => numbers.value.find((n) => n.id === selectedNumberId.value) ?? null,
 )
 
+/** Numbers in show running order: within each act by orderIndex, acts in order,
+ * act-less last. Mirrors ShowOrderView / the overview grid. */
+const orderedNumbers = computed(() => {
+  const ordered = [...numbers.value].sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id)
+  if (acts.value.length === 0) return ordered
+  const out: MusicalNumber[] = []
+  for (const act of [...acts.value].sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id))
+    out.push(...ordered.filter((n) => n.actId === act.id))
+  out.push(...ordered.filter((n) => n.actId == null))
+  return out
+})
+
+/** The same list grouped under act headers (for the numbers panel). */
+const numberGroups = computed(() => {
+  const ordered = orderedNumbers.value
+  if (acts.value.length === 0) return [{ header: null as string | null, numbers: ordered }]
+  const out = [...acts.value]
+    .sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id)
+    .map((act) => ({ header: act.name as string | null, numbers: ordered.filter((n) => n.actId === act.id) }))
+  const unassigned = ordered.filter((n) => n.actId == null)
+  if (unassigned.length > 0) out.push({ header: 'Unassigned', numbers: unassigned })
+  return out.filter((g) => g.numbers.length > 0)
+})
+
+/** Continuous 1-based running position across the whole show. */
+const runningIndex = (n: MusicalNumber) => orderedNumbers.value.indexOf(n) + 1
+
+/** The character a cast member plays IF that character is featured in this number. */
+const characterOf = (numberId: number, performerId: number) => {
+  const role = roles.value.find(
+    (r) =>
+      r.performerId === performerId &&
+      numberChars.value.some((nc) => nc.musicalNumberId === numberId && nc.roleId === r.id),
+  )
+  return role?.name ?? null
+}
+
 const performerName = (id: number) => {
   const p = cast.value.find((m) => m.performerId === id)?.performer ?? performers.value.find((x) => x.id === id)
   return p ? `${p.firstName} ${p.lastName}`.trim() : `#${id}`
@@ -220,9 +264,18 @@ async function saveNumber(number: MusicalNumber) {
 }
 
 async function setChoreographer(staffId: number | null) {
-  if (!selectedNumber.value) return
-  selectedNumber.value.choreographerStaffId = staffId
-  await api.put(`/numbers/${selectedNumber.value.id}`, selectedNumber.value).catch(() => {})
+  const n = selectedNumber.value
+  if (!n) return
+  const prev = n.choreographerStaffId ?? null
+  n.choreographerStaffId = staffId
+  try {
+    // Send a clean scalar payload (drop the choreographer nav object, mirroring
+    // setMemberGroup) so the write can't be rejected by a stale nested entity.
+    await api.put(`/numbers/${n.id}`, { ...n, choreographer: undefined })
+  } catch {
+    n.choreographerStaffId = prev // revert so the UI matches the server
+    toast.error("Couldn't save the choreographer — please try again.")
+  }
 }
 
 async function setTeachStatus(e: Event) {
@@ -246,12 +299,15 @@ async function deleteNumber(number: MusicalNumber) {
 }
 
 async function moveNumber(number: MusicalNumber, delta: -1 | 1) {
-  const i = numbers.value.indexOf(number)
+  // Nudge within the running order (act-grouped). Cross-act moves are the Show
+  // Order page's job; here a swap resequences the global running order.
+  const list = [...orderedNumbers.value]
+  const i = list.indexOf(number)
   const j = i + delta
-  if (j < 0 || j >= numbers.value.length) return
-  const list = [...numbers.value]
+  if (j < 0 || j >= list.length) return
   ;[list[i], list[j]] = [list[j], list[i]]
-  numbers.value = list
+  // Reflect locally by rewriting orderIndex so the computed re-sorts immediately.
+  list.forEach((n, idx) => (n.orderIndex = idx + 1))
   await api
     .put('/numbers/reorder', {
       productionId: scope.selectedProductionId,
@@ -298,8 +354,31 @@ async function addGroupToNumber(bucket: Bucket) {
 const addPerformerId = ref<number | ''>('')
 const quickFirst = ref('')
 const quickLast = ref('')
+const quickGender = ref<Gender | ''>('')
 const newGroupName = ref('')
 const newRoleName = ref('')
+
+// --- "Add a kid" type-ahead: suggest existing performers, kids first ---------
+const castQuery = ref('')
+const castPickerOpen = ref(false)
+
+/** Performers not yet in this show, 18-or-younger (or unknown age), alphabetical. */
+const suggestablePerformers = computed(() =>
+  availablePerformers.value
+    .filter((p) => {
+      const age = performerAge(p.id)
+      return age === null || age <= 18
+    })
+    .sort((a, b) =>
+      `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`),
+    ),
+)
+const castMatches = computed(() => {
+  const q = castQuery.value.trim().toLowerCase()
+  return suggestablePerformers.value
+    .filter((p) => q === '' || `${p.firstName} ${p.lastName}`.toLowerCase().includes(q))
+    .slice(0, 8)
+})
 
 async function addExistingToCast() {
   const pid = scope.selectedProductionId
@@ -313,6 +392,13 @@ async function addExistingToCast() {
   addPerformerId.value = ''
 }
 
+async function pickExistingToCast(p: Performer) {
+  addPerformerId.value = p.id
+  await addExistingToCast()
+  castQuery.value = ''
+  castPickerOpen.value = false
+}
+
 async function quickCreatePerformer() {
   const pid = scope.selectedProductionId
   if (pid === null || !quickFirst.value.trim()) return
@@ -320,6 +406,7 @@ async function quickCreatePerformer() {
     id: 0,
     firstName: quickFirst.value.trim(),
     lastName: quickLast.value.trim(),
+    gender: quickGender.value || null,
     isActive: true,
     createdAt: new Date().toISOString(),
   })
@@ -333,6 +420,7 @@ async function quickCreatePerformer() {
   toast.success(`${performer.firstName} added to the cast`)
   quickFirst.value = ''
   quickLast.value = ''
+  quickGender.value = ''
 }
 
 async function setMemberGroup(member: CastMembership, e: Event) {
@@ -494,46 +582,53 @@ async function deleteRole(role: Role) {
         <p v-if="numbers.length === 0" class="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
           No numbers yet.
         </p>
-        <ul v-else class="space-y-1">
-          <li v-for="(number, i) in numbers" :key="number.id">
-            <button
-              class="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors"
-              :class="
-                number.id === selectedNumberId
-                  ? 'border-primary bg-accent text-accent-foreground'
-                  : 'border-border hover:bg-accent/50'
-              "
-              @click="selectedNumberId = number.id"
-            >
-              <span class="w-5 shrink-0 text-xs text-muted-foreground">{{ i + 1 }}.</span>
-              <span class="flex-1 truncate font-medium">{{ number.title }}</span>
-              <component
-                :is="teachIcon(number.teachStatus)!.icon"
-                v-if="teachIcon(number.teachStatus)"
-                class="h-3.5 w-3.5 shrink-0"
-                :class="teachIcon(number.teachStatus)!.class"
-                :aria-label="teachIcon(number.teachStatus)!.label"
-              />
-              <span class="flex items-center gap-1 text-xs text-muted-foreground">
-                <Users class="h-3.5 w-3.5" /> {{ castCountOf(number.id) }}
-              </span>
-              <span class="flex flex-col">
-                <ArrowUp
-                  class="h-3.5 w-3.5 text-muted-foreground hover:text-foreground"
-                  role="button"
-                  aria-label="Move up"
-                  @click.stop="moveNumber(number, -1)"
-                />
-                <ArrowDown
-                  class="h-3.5 w-3.5 text-muted-foreground hover:text-foreground"
-                  role="button"
-                  aria-label="Move down"
-                  @click.stop="moveNumber(number, 1)"
-                />
-              </span>
-            </button>
-          </li>
-        </ul>
+        <div v-else class="space-y-3">
+          <div v-for="grp in numberGroups" :key="grp.header ?? 'flat'">
+            <h3 v-if="grp.header" class="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {{ grp.header }}
+            </h3>
+            <ul class="space-y-1">
+              <li v-for="number in grp.numbers" :key="number.id">
+                <button
+                  class="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors"
+                  :class="
+                    number.id === selectedNumberId
+                      ? 'border-primary bg-accent text-accent-foreground'
+                      : 'border-border hover:bg-accent/50'
+                  "
+                  @click="selectedNumberId = number.id"
+                >
+                  <span class="w-5 shrink-0 text-xs text-muted-foreground">{{ runningIndex(number) }}.</span>
+                  <span class="flex-1 truncate font-medium">{{ number.title }}</span>
+                  <component
+                    :is="teachIcon(number.teachStatus)!.icon"
+                    v-if="teachIcon(number.teachStatus)"
+                    class="h-3.5 w-3.5 shrink-0"
+                    :class="teachIcon(number.teachStatus)!.class"
+                    :aria-label="teachIcon(number.teachStatus)!.label"
+                  />
+                  <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Users class="h-3.5 w-3.5" /> {{ castCountOf(number.id) }}
+                  </span>
+                  <span class="flex flex-col">
+                    <ArrowUp
+                      class="h-3.5 w-3.5 text-muted-foreground hover:text-foreground"
+                      role="button"
+                      aria-label="Move up"
+                      @click.stop="moveNumber(number, -1)"
+                    />
+                    <ArrowDown
+                      class="h-3.5 w-3.5 text-muted-foreground hover:text-foreground"
+                      role="button"
+                      aria-label="Move down"
+                      @click.stop="moveNumber(number, 1)"
+                    />
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
 
         <!-- Side panel: cast / groups / roles -->
         <div class="rounded-lg border border-border">
@@ -551,32 +646,60 @@ async function deleteRole(role: Role) {
 
           <!-- Cast tab -->
           <div v-if="sideTab === 'cast'" class="space-y-3 p-3">
-            <form v-if="availablePerformers.length > 0" class="flex gap-2" @submit.prevent="addExistingToCast">
-              <select
-                v-model="addPerformerId"
-                class="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            <!-- Add an existing kid: type-ahead over past performers (18 & under first) -->
+            <div v-if="availablePerformers.length > 0" class="relative">
+              <input
+                v-model="castQuery"
+                placeholder="Add a kid — type to search…"
+                class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                @focus="castPickerOpen = true"
+                @keydown.escape="castPickerOpen = false"
+                @keydown.enter.prevent="castMatches[0] && pickExistingToCast(castMatches[0])"
+              />
+              <div
+                v-if="castPickerOpen && castMatches.length > 0"
+                class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md"
               >
-                <option value="" disabled>Add existing performer…</option>
-                <option v-for="p in availablePerformers" :key="p.id" :value="p.id">
-                  {{ p.firstName }} {{ p.lastName }}
-                </option>
-              </select>
-              <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent">Add</button>
-            </form>
-            <form class="flex gap-2" @submit.prevent="quickCreatePerformer">
-              <input
-                v-model="quickFirst"
-                placeholder="First"
-                class="w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <input
-                v-model="quickLast"
-                placeholder="Last"
-                class="w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent" aria-label="Quick-add performer">
-                <Plus class="h-4 w-4" />
-              </button>
+                <button
+                  v-for="p in castMatches"
+                  :key="p.id"
+                  type="button"
+                  class="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+                  @mousedown.prevent="pickExistingToCast(p)"
+                >
+                  <span class="truncate">{{ p.firstName }} {{ p.lastName }}</span>
+                  <span v-if="performerAge(p.id) !== null" class="shrink-0 text-xs text-muted-foreground">{{ performerAge(p.id) }}</span>
+                </button>
+              </div>
+              <div v-if="castPickerOpen" class="fixed inset-0 z-10" @mousedown="castPickerOpen = false" />
+            </div>
+            <!-- Quick-create a brand-new kid: name row, then sex + add -->
+            <form class="space-y-2" @submit.prevent="quickCreatePerformer">
+              <div class="flex gap-2">
+                <input
+                  v-model="quickFirst"
+                  placeholder="First"
+                  class="w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <input
+                  v-model="quickLast"
+                  placeholder="Last"
+                  class="w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <div class="flex gap-2">
+                <select
+                  v-model="quickGender"
+                  class="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  aria-label="Sex"
+                >
+                  <option value="">Sex…</option>
+                  <option v-for="o in genderOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </select>
+                <button type="submit" class="rounded-md border border-border px-2.5 text-sm hover:bg-accent" aria-label="Quick-add performer">
+                  <Plus class="h-4 w-4" />
+                </button>
+              </div>
             </form>
             <p v-if="cast.length === 0" class="text-center text-xs text-muted-foreground">Nobody in this production yet.</p>
             <ul class="space-y-1">
@@ -810,6 +933,9 @@ async function deleteRole(role: Role) {
                     {{ performerName(m.performerId) }}
                     <span v-if="performerAge(m.performerId) !== null" class="text-xs text-muted-foreground">
                       · {{ performerAge(m.performerId) }}
+                    </span>
+                    <span v-if="characterOf(selectedNumber.id, m.performerId)" class="text-xs font-medium text-primary">
+                      — {{ characterOf(selectedNumber.id, m.performerId) }}
                     </span>
                   </span>
                 </label>

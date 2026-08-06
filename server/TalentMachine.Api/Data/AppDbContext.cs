@@ -177,6 +177,10 @@ public class AppDbContext : DbContext
         b.Entity<CostumeAssignment>()
             .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
             .OnDelete(DeleteBehavior.Cascade);
+        // Deleting a look (piece) leaves its wearers assigned but "unassigned look".
+        b.Entity<CostumeAssignment>()
+            .HasOne(x => x.CostumePiece).WithMany().HasForeignKey(x => x.CostumePieceId)
+            .OnDelete(DeleteBehavior.SetNull);
         b.Entity<CostumeAssignment>().HasIndex(x => new { x.MusicalNumberId, x.PerformerId }).IsUnique();
 
         // Formations die with their number; coordinates stored as jsonb.
