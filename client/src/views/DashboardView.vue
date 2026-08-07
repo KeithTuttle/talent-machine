@@ -40,7 +40,18 @@ watch(() => scope.selectedProductionId, load)
 
 const pct = (n: number, d: number) => (d === 0 ? 0 : Math.round((100 * n) / d))
 
+// A number counts as taught once it has any status at all — marking one "Taught"
+// has to move this bar, or the tracker looks broken. "Complete" is the further
+// milestone, shown as the darker segment inside the same bar rather than as the
+// whole story: previously it WAS the whole story, so a show could be entirely
+// taught and still read 0.
+const taughtCount = computed(() =>
+  data.value ? data.value.rollups.numbersTotal - data.value.rollups.notTaught : 0,
+)
 const teachPct = computed(() =>
+  data.value ? pct(taughtCount.value, data.value.rollups.numbersTotal) : 0,
+)
+const teachCompletePct = computed(() =>
   data.value ? pct(data.value.rollups.teachComplete, data.value.rollups.numbersTotal) : 0,
 )
 const rolesPct = computed(() =>
@@ -110,10 +121,12 @@ function weekday(date: string) {
             <div>
               <div class="mb-1 flex items-center justify-between text-sm">
                 <span class="font-medium">Numbers taught</span>
-                <span class="text-muted-foreground">{{ data.rollups.teachComplete }}/{{ data.rollups.numbersTotal }} complete</span>
+                <span class="text-muted-foreground">{{ taughtCount }}/{{ data.rollups.numbersTotal }} taught</span>
               </div>
-              <div class="h-2 overflow-hidden rounded-full bg-muted">
-                <div class="h-full rounded-full bg-green-500" :style="{ width: teachPct + '%' }" />
+              <!-- Pale fill = taught at all; solid = polished to Complete. -->
+              <div class="relative h-2 overflow-hidden rounded-full bg-muted">
+                <div class="absolute inset-y-0 left-0 rounded-full bg-green-500/40" :style="{ width: teachPct + '%' }" />
+                <div class="absolute inset-y-0 left-0 rounded-full bg-green-500" :style="{ width: teachCompletePct + '%' }" />
               </div>
             </div>
             <div>
@@ -136,6 +149,7 @@ function weekday(date: string) {
             </div>
             <div class="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-sm text-muted-foreground">
               <span><Users class="mr-1 inline h-4 w-4" />{{ data.rollups.performersInShow }} performers</span>
+              <span v-if="data.rollups.teachComplete > 0">{{ data.rollups.teachComplete }} complete</span>
               <span v-if="data.rollups.notTaught > 0">{{ data.rollups.notTaught }} not taught yet</span>
               <span v-if="data.rollups.teachNeedsReview > 0" class="text-amber-600 dark:text-amber-500">
                 {{ data.rollups.teachNeedsReview }} need review
