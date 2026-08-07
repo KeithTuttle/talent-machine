@@ -42,6 +42,14 @@ public class CostumeNumbersController : ControllerBase
     public async Task<ActionResult<CostumeNumber>> Create(LinkRequest input)
     {
         if (!await CanAccessNumber(input.MusicalNumberId)) return StatusCode(403);
+
+        // The costume must be one of THIS production's — FindScopedAsync goes
+        // through the tenant filter, so another tenant's id simply isn't found.
+        var costume = await _db.FindScopedAsync<Costume>(input.CostumeId);
+        var productionId = await _db.Numbers.Where(n => n.Id == input.MusicalNumberId)
+            .Select(n => (int?)n.ProductionId).FirstOrDefaultAsync();
+        if (costume is null || costume.ProductionId != productionId) return NotFound();
+
         var existing = await _db.CostumeNumbers.FirstOrDefaultAsync(
             cn => cn.CostumeId == input.CostumeId && cn.MusicalNumberId == input.MusicalNumberId);
         if (existing is not null) return Ok(existing); // idempotent

@@ -40,6 +40,11 @@ public class CostumeAssignmentsController : ControllerBase
     public async Task<ActionResult<CostumeAssignment>> Create(CostumeAssignment input)
     {
         if (!await CanAccessNumber(input.MusicalNumberId)) return StatusCode(403);
+        // A costume, if given, must be one this caller can actually see
+        // (FindScopedAsync goes through the tenant filter).
+        if (input.CostumeId is int cid && await _db.FindScopedAsync<Costume>(cid) is null)
+            return NotFound();
+
         var existing = await _db.CostumeAssignments.FirstOrDefaultAsync(
             a => a.MusicalNumberId == input.MusicalNumberId && a.PerformerId == input.PerformerId);
         if (existing is not null)
