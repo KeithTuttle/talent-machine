@@ -43,6 +43,7 @@ public class AppDbContext : DbContext
     public DbSet<Costume> Costumes => Set<Costume>();
     public DbSet<CostumeNumber> CostumeNumbers => Set<CostumeNumber>();
     public DbSet<CostumeAssignment> CostumeAssignments => Set<CostumeAssignment>();
+    public DbSet<CostumeFitting> CostumeFittings => Set<CostumeFitting>();
     public DbSet<Formation> Formations => Set<Formation>();
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<SceneCharacter> SceneCharacters => Set<SceneCharacter>();
@@ -87,6 +88,7 @@ public class AppDbContext : DbContext
         b.Entity<SceneCharacter>().HasKey(x => new { x.SceneId, x.RoleId });
         b.Entity<NumberCharacter>().HasKey(x => new { x.MusicalNumberId, x.RoleId });
         b.Entity<CostumeNumber>().HasKey(x => new { x.CostumeId, x.MusicalNumberId });
+        b.Entity<CostumeFitting>().HasKey(x => new { x.CostumeId, x.PerformerId });
 
         // A Clerk user can belong to several companies, but only once each.
         b.Entity<Membership>().HasIndex(x => new { x.ClerkUserId, x.TenantId }).IsUnique();
@@ -189,6 +191,13 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull);
         b.Entity<CostumeAssignment>().HasIndex(x => new { x.MusicalNumberId, x.PerformerId }).IsUnique();
         b.Entity<Costume>().HasIndex(x => new { x.ProductionId, x.OrderIndex });
+        // A fitting dies with its costume or its performer.
+        b.Entity<CostumeFitting>()
+            .HasOne(x => x.Costume).WithMany().HasForeignKey(x => x.CostumeId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<CostumeFitting>()
+            .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Formations die with their number; coordinates stored as jsonb.
         b.Entity<Formation>()

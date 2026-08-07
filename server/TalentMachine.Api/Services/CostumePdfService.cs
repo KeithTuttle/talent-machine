@@ -14,6 +14,7 @@ public class CostumeSheetData
     public List<Costume> Costumes { get; set; } = new();
     public List<CostumeNumber> CostumeNumbers { get; set; } = new();
     public List<CostumeAssignment> Assignments { get; set; } = new();
+    public List<CostumeFitting> Fittings { get; set; } = new();
     public List<NumberCast> NumberCasts { get; set; } = new();
     public List<Performer> Performers { get; set; } = new();
 }
@@ -32,6 +33,9 @@ public class CostumePdfService
         var performerGender = data.Performers.ToDictionary(p => p.Id, p => p.Gender);
         var castByNumber = data.NumberCasts.ToLookup(c => c.MusicalNumberId, c => c.PerformerId);
         var assignmentsByNumber = data.Assignments.ToLookup(a => a.MusicalNumberId);
+        var fittingByKey = data.Fittings
+            .GroupBy(f => (f.CostumeId, f.PerformerId))
+            .ToDictionary(g => g.Key, g => g.First());
         var costumeById = data.Costumes.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
         // Costumes a number wears: its explicit links, plus any a kid is assigned
         // (so an assignment can never be orphaned off the sheet).
@@ -73,7 +77,7 @@ public class CostumePdfService
                         var n = ordered[i];
                         col.Item().Element(c => ComposeNumber(
                             c, i + 1, n, costumesByNumber[n.Id].OrderBy(x => x.Name).ToList(),
-                            assignmentsByNumber[n.Id].ToList(),
+                            assignmentsByNumber[n.Id].ToList(), fittingByKey,
                             castByNumber[n.Id].ToHashSet(), performerName, performerGender));
                     }
                 });
@@ -95,7 +99,8 @@ public class CostumePdfService
 
     private void ComposeNumber(
         IContainer container, int runningNumber, MusicalNumber number,
-        List<Costume> costumes, List<CostumeAssignment> assignments, HashSet<int> cast,
+        List<Costume> costumes, List<CostumeAssignment> assignments,
+        Dictionary<(int, int), CostumeFitting> fittings, HashSet<int> cast,
         Dictionary<int, string> performerName, Dictionary<int, Gender?> performerGender)
     {
         container.Border(1).BorderColor(Colors.Grey.Lighten2).Padding(8).Column(col =>
@@ -144,7 +149,8 @@ public class CostumePdfService
                             .OrderBy(Named).ToList();
                         if (ids.Count == 0) continue;
                         col.Item().PaddingTop(3).Text(LookName(costume)).FontSize(9).SemiBold().FontColor(Colors.Grey.Darken3);
-                        foreach (var id in ids) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named, true));
+                        foreach (var id in ids)
+                            col.Item().Element(c => ComposeWearer(c, id, cast, Fit(costume.Id, id), Named));
                     }
                     var noLook = wearerIds
                         .Where(id => !byPerformer.TryGetValue(id, out var a) || a.CostumeId is null)
@@ -152,35 +158,43 @@ public class CostumePdfService
                     if (noLook.Count > 0)
                     {
                         col.Item().PaddingTop(3).Text("No costume assigned").FontSize(9).SemiBold().FontColor(Colors.Grey.Medium);
-                        foreach (var id in noLook) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named, false));
+                        foreach (var id in noLook) col.Item().Element(c => ComposeWearer(c, id, cast, null, Named));
                     }
                 }
                 else
                 {
                     // One costume dresses everyone here, so they all need fitting in it.
+                    var only = costumes.Count == 1 ? costumes[0].Id : (int?)null;
                     foreach (var id in wearerIds.OrderBy(Named))
-                        col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named, costumes.Count == 1));
+                        col.Item().Element(c => ComposeWearer(
+                            c, id, cast, only is int oc ? Fit(oc, id) : null, Named));
                 }
+
+                CostumeFitting? Fit(int costumeId, int performerId) =>
+                    fittings.TryGetValue((costumeId, performerId), out var f) ? f : new CostumeFitting();
             }
         });
     }
 
     private static string LookName(Costume c) => CostumeChanges.LookName(c);
 
+    /// <summary>
+    /// One wearer's line. <paramref name="fit"/> is their fit in the costume they
+    /// wear here (null when we can't tell which costume that is, so no fitting is
+    /// claimed either way).
+    /// </summary>
     private void ComposeWearer(
         IContainer container, int id, HashSet<int> cast,
-        Dictionary<int, CostumeAssignment> byPerformer, Func<int, string> named,
-        bool wearsACostume)
+        CostumeFitting? fit, Func<int, string> named)
     {
         var extra = !cast.Contains(id);
-        byPerformer.TryGetValue(id, out var a);
         container.Text(t =>
         {
             t.Span($"• {named(id)}").FontColor(Colors.Grey.Darken4);
             if (extra) t.Span("  (on stage, not in number)").FontSize(8).FontColor(Colors.Orange.Darken2);
-            if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  — size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
-            if (!string.IsNullOrWhiteSpace(a?.Notes)) t.Span($"  ({a!.Notes})").FontSize(9).Italic().FontColor(Colors.Grey.Medium);
-            if (wearsACostume && a?.IsFitted != true)
+            if (!string.IsNullOrWhiteSpace(fit?.Size)) t.Span($"  — size {fit!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
+            if (!string.IsNullOrWhiteSpace(fit?.Notes)) t.Span($"  ({fit!.Notes})").FontSize(9).Italic().FontColor(Colors.Grey.Medium);
+            if (fit is { IsFitted: false })
                 t.Span("  needs fitting").FontSize(8).Italic().FontColor(Colors.Red.Medium);
         });
     }

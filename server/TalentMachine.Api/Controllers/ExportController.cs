@@ -71,6 +71,7 @@ public class ExportController : ControllerBase
             costumes = await _db.Costumes.AsNoTracking().ToListAsync(),
             costumeNumbers = await _db.CostumeNumbers.AsNoTracking().ToListAsync(),
             costumeAssignments = await _db.CostumeAssignments.AsNoTracking().ToListAsync(),
+            costumeFittings = await _db.CostumeFittings.AsNoTracking().ToListAsync(),
             formations = await _db.Formations.AsNoTracking().ToListAsync(),
         };
 

@@ -144,19 +144,16 @@ public class DashboardController : ControllerBase
         var costumeNumbers = await _db.CostumeNumbers
             .Where(cn => numberIds.Contains(cn.MusicalNumberId)).ToListAsync();
 
-        // Who needs a fitting: everyone the app can say is wearing a costume. That's
-        // an explicit assignment OR — in a number with exactly one costume — simply
-        // being in the number, since one costume dresses everyone (which is why the
-        // per-kid picker stays hidden there). Counting only explicit assignments made
-        // fittings in single-costume numbers invisible.
+        // A fitting is a real-world event that happens once per kid per costume, so
+        // count DISTINCT (costume, performer) pairs — not one per number. A kid in
+        // twelve numbers wearing the same street wear is one fitting, not twelve.
         var costumeById = catalog.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
         var assignmentByKey = costumeAssignments
             .GroupBy(a => (a.MusicalNumberId, a.PerformerId))
             .ToDictionary(g => g.Key, g => g.First());
         var wornByNumber = costumeNumbers.ToLookup(cn => cn.MusicalNumberId, cn => cn.CostumeId);
 
-        var fittingsTotal = 0;
-        var fittingsDone = 0;
+        var needed = new HashSet<(int CostumeId, int PerformerId)>();
         foreach (var n in numbers)
         {
             var people = casts.Where(c => c.MusicalNumberId == n.Id).Select(c => c.PerformerId)
@@ -164,12 +161,16 @@ public class DashboardController : ControllerBase
                 .Distinct();
             foreach (var pid in people)
             {
-                if (Services.CostumeChanges.CostumeIdFor(n, pid, assignmentByKey, costumeById, wornByNumber) is null)
-                    continue;
-                fittingsTotal++;
-                if (assignmentByKey.TryGetValue((n.Id, pid), out var a) && a.IsFitted) fittingsDone++;
+                if (Services.CostumeChanges.CostumeIdFor(n, pid, assignmentByKey, costumeById, wornByNumber)
+                    is int cid) needed.Add((cid, pid));
             }
         }
+        var fittings = await _db.CostumeFittings
+            .Where(f => f.Costume != null && f.Costume.ProductionId == productionId).ToListAsync();
+        var fittedPairs = fittings.Where(f => f.IsFitted)
+            .Select(f => (f.CostumeId, f.PerformerId)).ToHashSet();
+        var fittingsTotal = needed.Count;
+        var fittingsDone = needed.Count(fittedPairs.Contains);
 
         var costumes = new CostumesDto(
             Total: catalog.Count,

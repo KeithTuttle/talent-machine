@@ -300,10 +300,14 @@ public class DemoSeeder : IHostedService
             new CostumeNumber { CostumeId = cGown.Id, MusicalNumberId = finale.Id },
             new CostumeNumber { CostumeId = cRooster.Id, MusicalNumberId = easyStreet.Id });
         db.CostumeAssignments.AddRange(
-            new CostumeAssignment { MusicalNumberId = tomorrow.Id, PerformerId = kids[0].Id, CostumeId = cAnnieDress.Id, Size = "CH 10", Notes = "Hem taken up 1\"", IsFitted = true },
-            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[4].Id, CostumeId = cOrphan.Id, Size = "CH 8" },
             // Liam is on stage during Hard-Knock Life but not cast in it (extra).
-            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[1].Id, CostumeId = cOrphan.Id, Size = "CH 10", Notes = "Standing on the platform" });
+            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[1].Id, CostumeId = cOrphan.Id });
+        // Sizes and fittings hang off the COSTUME, so one fitting covers every number
+        // that wears it.
+        db.CostumeFittings.AddRange(
+            new CostumeFitting { CostumeId = cAnnieDress.Id, PerformerId = kids[0].Id, Size = "CH 10", Notes = "Hem taken up 1\"", IsFitted = true },
+            new CostumeFitting { CostumeId = cOrphan.Id, PerformerId = kids[4].Id, Size = "CH 8" },
+            new CostumeFitting { CostumeId = cOrphan.Id, PerformerId = kids[1].Id, Size = "CH 10", Notes = "Standing on the platform" });
         await db.SaveChangesAsync();
 
         // --- A saved formation for Hard-Knock Life (history to look back on) --

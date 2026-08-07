@@ -15,6 +15,7 @@ public class CostumePlotData
     public List<CostumeAssignment> Assignments { get; set; } = new();
     public List<Costume> Costumes { get; set; } = new();
     public List<CostumeNumber> CostumeNumbers { get; set; } = new();
+    public List<CostumeFitting> Fittings { get; set; } = new();
     public List<Performer> Performers { get; set; } = new();
     public List<CastMembership> Cast { get; set; } = new();
 }
@@ -34,6 +35,9 @@ public class CostumePlotPdfService
 
         var costumeById = data.Costumes.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
         var worn = data.CostumeNumbers.ToLookup(cn => cn.MusicalNumberId, cn => cn.CostumeId);
+        var fittingByKey = data.Fittings
+            .GroupBy(f => (f.CostumeId, f.PerformerId))
+            .ToDictionary(g => g.Key, g => g.First());
         var assignmentByKey = data.Assignments
             .GroupBy(a => (a.MusicalNumberId, a.PerformerId))
             .ToDictionary(g => g.Key, g => g.First());
@@ -84,7 +88,7 @@ public class CostumePlotPdfService
                             .ToList();
 
                         col.Item().Element(c => ComposePerformer(
-                            c, p, appearances, assignmentByKey, costumeById, worn, actName));
+                            c, p, appearances, assignmentByKey, costumeById, worn, fittingByKey, actName));
                     }
                 });
 
@@ -108,6 +112,7 @@ public class CostumePlotPdfService
         Dictionary<(int, int), CostumeAssignment> assignments,
         Dictionary<int, Costume> costumes,
         ILookup<int, int> costumesByNumber,
+        Dictionary<(int, int), CostumeFitting> fittings,
         Dictionary<int, string> actName)
     {
         container.Border(1).BorderColor(Colors.Grey.Lighten2).Padding(8).Column(col =>
@@ -124,9 +129,14 @@ public class CostumePlotPdfService
             string? previous = null;
             foreach (var n in appearances)
             {
-                assignments.TryGetValue((n.Id, performer.Id), out var a);
+                var costumeId = CostumeChanges.CostumeIdFor(
+                    n, performer.Id, assignments, costumes, costumesByNumber);
                 var costume = CostumeChanges.DisplayCostume(
                     n, performer.Id, assignments, costumes, costumesByNumber);
+                // Size/fitting belong to the costume, so they're the same wherever it's worn.
+                CostumeFitting? fit = costumeId is int cid
+                    ? (fittings.TryGetValue((cid, performer.Id), out var f) ? f : new CostumeFitting())
+                    : null;
                 var changed = previous is not null && !string.IsNullOrWhiteSpace(costume)
                     && !string.Equals(previous, costume, StringComparison.OrdinalIgnoreCase);
 
@@ -138,9 +148,9 @@ public class CostumePlotPdfService
                     t.Span("  —  ").FontColor(Colors.Grey.Lighten1);
                     t.Span(string.IsNullOrWhiteSpace(costume) ? "(costume not set)" : costume!)
                         .SemiBold().FontColor(string.IsNullOrWhiteSpace(costume) ? Colors.Grey.Medium : Colors.Black);
-                    if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(fit?.Size)) t.Span($"  size {fit!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
                     if (changed) t.Span("   ← CHANGE").FontSize(8).SemiBold().FontColor(Colors.Orange.Darken2);
-                    if (!string.IsNullOrWhiteSpace(costume) && a?.IsFitted != true)
+                    if (fit is { IsFitted: false })
                         t.Span("   needs fitting").FontSize(8).Italic().FontColor(Colors.Red.Medium);
                 });
 

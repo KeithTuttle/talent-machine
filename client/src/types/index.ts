@@ -319,16 +319,25 @@ export interface CostumeNumber {
   musicalNumberId: number
 }
 
+/** Which costume a performer wears in a number. */
 export interface CostumeAssignment {
   id: number
   musicalNumberId: number
   performerId: number
   /** Which catalog costume this performer wears; null = unassigned. */
   costumeId?: number | null
+}
+
+/**
+ * One performer's fit in one costume — size, alteration notes, fitted. Keyed on
+ * (costume, performer), so fitting a kid once counts everywhere it's worn.
+ */
+export interface CostumeFitting {
+  costumeId: number
+  performerId: number
   size?: string | null
   notes?: string | null
-  /** Has this performer been fitted in it? */
-  isFitted?: boolean
+  isFitted: boolean
 }
 
 export interface Guardian {

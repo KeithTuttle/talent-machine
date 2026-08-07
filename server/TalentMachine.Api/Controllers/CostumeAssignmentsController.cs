@@ -50,9 +50,6 @@ public class CostumeAssignmentsController : ControllerBase
         if (existing is not null)
         {
             existing.CostumeId = input.CostumeId;
-            existing.Size = input.Size;
-            existing.Notes = input.Notes;
-            existing.IsFitted = input.IsFitted;
             await _db.SaveChangesAsync();
             return Ok(existing);
         }

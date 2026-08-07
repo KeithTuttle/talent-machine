@@ -97,6 +97,7 @@ public class CostumesController : ControllerBase
             Costumes = await _db.Costumes.Where(c => c.ProductionId == productionId).ToListAsync(),
             CostumeNumbers = await _db.CostumeNumbers.Where(cn => numberIds.Contains(cn.MusicalNumberId)).ToListAsync(),
             Assignments = await _db.CostumeAssignments.Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync(),
+            Fittings = await _db.CostumeFittings.Where(f => f.Costume != null && f.Costume.ProductionId == productionId).ToListAsync(),
             NumberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync(),
             Performers = await _db.Performers.ToListAsync(),
         };
@@ -152,6 +153,7 @@ public class CostumesController : ControllerBase
             Assignments = await _db.CostumeAssignments.Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync(),
             Costumes = await _db.Costumes.Where(c => c.ProductionId == productionId).ToListAsync(),
             CostumeNumbers = await _db.CostumeNumbers.Where(cn => numberIds.Contains(cn.MusicalNumberId)).ToListAsync(),
+            Fittings = await _db.CostumeFittings.Where(f => f.Costume != null && f.Costume.ProductionId == productionId).ToListAsync(),
             Performers = await _db.Performers.ToListAsync(),
             Cast = await _db.CastMemberships.Where(m => m.ProductionId == productionId).ToListAsync(),
         };

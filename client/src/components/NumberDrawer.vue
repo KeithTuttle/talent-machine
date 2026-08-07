@@ -18,6 +18,7 @@ import type {
   CastMembership,
   Costume,
   CostumeAssignment,
+  CostumeFitting,
   CostumeNumber,
   Gender,
   MusicalNumber,
@@ -47,6 +48,7 @@ const emit = defineEmits<{
 const staff = useStaffStore()
 const links = ref<CostumeNumber[]>([])
 const assignments = ref<CostumeAssignment[]>([])
+const fittings = ref<CostumeFitting[]>([])
 const roles = ref<Role[]>([])
 const numberChars = ref<NumberCharacter[]>([])
 const tab = ref<'cast' | 'costumes' | 'formations'>('cast')
@@ -56,15 +58,19 @@ watch(
   async (id) => {
     links.value = []
     assignments.value = []
+    fittings.value = []
     numberChars.value = []
     tab.value = 'cast'
     staff.fetch()
     if (id != null && props.number) {
-      ;[links.value, assignments.value, roles.value, numberChars.value] = await Promise.all([
+      ;[links.value, assignments.value, roles.value, numberChars.value, fittings.value] = await Promise.all([
         api.get<CostumeNumber[]>(`/costumenumbers?numberId=${id}`).then((r) => r.data).catch(() => []),
         api.get<CostumeAssignment[]>(`/costumeassignments?numberId=${id}`).then((r) => r.data).catch(() => []),
         api.get<Role[]>(`/roles?productionId=${props.number.productionId}`).then((r) => r.data).catch(() => []),
         api.get<NumberCharacter[]>(`/numbercharacters?numberId=${id}`).then((r) => r.data).catch(() => []),
+        // Fittings are per costume, so load the whole show's — the kids here may
+        // already have been fitted via another number.
+        api.get<CostumeFitting[]>(`/costumefittings?productionId=${props.number.productionId}`).then((r) => r.data).catch(() => []),
       ])
     }
   },
@@ -210,10 +216,7 @@ async function saveAssignment(performerId: number, patch: Partial<CostumeAssignm
   if (!props.number) return
   let a = assignmentOf(performerId)
   if (!a) {
-    a = {
-      id: 0, musicalNumberId: props.number.id, performerId,
-      costumeId: null, size: null, notes: null, isFitted: false,
-    }
+    a = { id: 0, musicalNumberId: props.number.id, performerId, costumeId: null }
     assignments.value.push(a)
   }
   Object.assign(a, patch)
@@ -222,11 +225,44 @@ async function saveAssignment(performerId: number, patch: Partial<CostumeAssignm
     musicalNumberId: props.number.id,
     performerId,
     costumeId: a.costumeId ?? null,
-    size: a.size ?? null,
-    notes: a.notes ?? null,
-    isFitted: a.isFitted ?? false,
   })
   a.id = data.id
+}
+
+// --- Sizes & fittings --------------------------------------------------------
+// These belong to the COSTUME, not to this number — fit a kid in the street wear
+// once and they're fitted for it wherever it's worn.
+
+/** Which costume a performer wears here: their assignment, else the only one. */
+const costumeIdFor = (performerId: number) => {
+  const explicit = assignmentOf(performerId)?.costumeId
+  if (explicit != null) return explicit
+  return pieces.value.length === 1 ? pieces.value[0].id : null
+}
+
+const fittingFor = (performerId: number) => {
+  const cid = costumeIdFor(performerId)
+  return cid == null ? undefined : fittings.value.find(
+    (f) => f.costumeId === cid && f.performerId === performerId)
+}
+
+async function saveFitting(performerId: number, patch: Partial<CostumeFitting>) {
+  const costumeId = costumeIdFor(performerId)
+  if (costumeId == null) return // can't tell which costume yet — nothing to fit
+  let f = fittingFor(performerId)
+  if (!f) {
+    f = { costumeId, performerId, size: null, notes: null, isFitted: false }
+    fittings.value.push(f)
+  }
+  Object.assign(f, patch)
+  await api.post('/costumefittings', {
+    costumeId,
+    performerId,
+    size: f.size ?? null,
+    notes: f.notes ?? null,
+    isFitted: f.isFitted ?? false,
+  }).catch(() => {})
+  emit('catalogChanged')
 }
 
 // --- Who's in which costume --------------------------------------------------
@@ -455,20 +491,29 @@ const castPerformers = computed(() =>
             </div>
           </div>
 
-          <!-- Per-kid sizes -->
+          <!-- Sizes & fittings — these belong to the costume, not to this number -->
           <div class="space-y-2">
-            <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sizes &amp; notes</span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sizes &amp; fittings</span>
+            <p class="text-[11px] leading-snug text-muted-foreground">
+              A fitting belongs to the costume — fit a kid once and they're fitted for it in
+              every number that wears it.
+            </p>
             <div v-for="pid in wearers" :key="pid" class="flex flex-wrap items-center gap-1.5 text-sm">
               <span class="w-28 truncate">
                 {{ performerName(pid) }}
                 <span v-if="!isCast(pid)" class="text-xs text-orange-600 dark:text-orange-400" title="On stage, not in the number">(extra)</span>
               </span>
-              <input :value="assignmentOf(pid)?.size ?? ''" placeholder="Size" class="w-20 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveAssignment(pid, { size: ($event.target as HTMLInputElement).value || null })" />
-              <input :value="assignmentOf(pid)?.notes ?? ''" placeholder="Alteration notes" class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveAssignment(pid, { notes: ($event.target as HTMLInputElement).value || null })" />
-              <label class="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-muted-foreground" title="Fitting done">
-                <input type="checkbox" class="accent-[hsl(var(--primary))]" :checked="assignmentOf(pid)?.isFitted ?? false" @change="saveAssignment(pid, { isFitted: ($event.target as HTMLInputElement).checked })" />
-                fitted
-              </label>
+              <template v-if="costumeIdFor(pid) !== null">
+                <input :value="fittingFor(pid)?.size ?? ''" placeholder="Size" class="w-20 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveFitting(pid, { size: ($event.target as HTMLInputElement).value || null })" />
+                <input :value="fittingFor(pid)?.notes ?? ''" placeholder="Alteration notes" class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveFitting(pid, { notes: ($event.target as HTMLInputElement).value || null })" />
+                <label class="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-muted-foreground" title="Fitting done — applies to this costume everywhere">
+                  <input type="checkbox" class="accent-[hsl(var(--primary))]" :checked="fittingFor(pid)?.isFitted ?? false" @change="saveFitting(pid, { isFitted: ($event.target as HTMLInputElement).checked })" />
+                  fitted
+                </label>
+              </template>
+              <span v-else class="flex-1 text-xs italic text-muted-foreground">
+                put them in a costume above to record a size
+              </span>
               <button v-if="!isCast(pid)" class="rounded p-1 text-muted-foreground hover:text-destructive" title="Remove extra" @click="removeAssignment(pid)"><X class="h-3.5 w-3.5" /></button>
             </div>
             <select v-if="extraCandidates.length" class="rounded-md border border-dashed border-border bg-transparent px-2 py-1 text-xs text-muted-foreground focus:outline-none" :value="''" @change="addExtra">
