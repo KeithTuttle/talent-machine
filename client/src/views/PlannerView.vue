@@ -30,8 +30,9 @@ import type {
   Act,
   CastGroup,
   CastMembership,
-  CostumeAssignment,
   Costume,
+  CostumeAssignment,
+  CostumeNumber,
   Gender,
   MusicalNumber,
   NumberCast,
@@ -60,6 +61,7 @@ const performers = ref<Performer[]>([])
 const sceneChars = ref<SceneCharacter[]>([])
 const numberChars = ref<NumberCharacter[]>([])
 const costumeCatalog = ref<Costume[]>([])
+const costumeNumbers = ref<CostumeNumber[]>([])
 const costumeAssignments = ref<CostumeAssignment[]>([])
 
 const selectedNumberId = ref<number | null>(null)
@@ -75,11 +77,6 @@ const drawerMember = ref<CastMembership | null>(null)
 const drawerNumber = ref<MusicalNumber | null>(null)
 
 const hasNotes = (m: CastMembership) => !!(m.notes || m.performer?.notes)
-
-/** Distinct costume labels in use (for reuse chips in the number drawer). */
-const costumeLabels = computed(() =>
-  [...new Set(numbers.value.map((n) => n.costumeLabel?.trim()).filter((l): l is string => !!l))].sort(),
-)
 
 /** Fetch a costume-related PDF and hand it to the browser as a download. */
 async function downloadPdf(path: string, filename: string) {
@@ -122,6 +119,7 @@ async function loadAll() {
     sceneChars.value = []
     numberChars.value = []
     costumeCatalog.value = []
+    costumeNumbers.value = []
     costumeAssignments.value = []
     return
   }
@@ -136,6 +134,7 @@ async function loadAll() {
     sceneChars.value,
     numberChars.value,
     costumeCatalog.value,
+    costumeNumbers.value,
     costumeAssignments.value,
   ] = await Promise.all([
     safeGet<MusicalNumber>(`/numbers?productionId=${pid}`),
@@ -148,6 +147,7 @@ async function loadAll() {
     safeGet<SceneCharacter>(`/scenecharacters?productionId=${pid}`),
     safeGet<NumberCharacter>(`/numbercharacters?productionId=${pid}`),
     safeGet<Costume>(`/costumes?productionId=${pid}`),
+    safeGet<CostumeNumber>(`/costumenumbers?productionId=${pid}`),
     safeGet<CostumeAssignment>(`/costumeassignments?productionId=${pid}`),
   ])
   if (!numbers.value.some((n) => n.id === selectedNumberId.value))
@@ -159,8 +159,9 @@ async function loadAll() {
 async function reloadCostumes() {
   const pid = scope.selectedProductionId
   if (pid === null) return
-  ;[costumeCatalog.value, costumeAssignments.value] = await Promise.all([
+  ;[costumeCatalog.value, costumeNumbers.value, costumeAssignments.value] = await Promise.all([
     safeGet<Costume>(`/costumes?productionId=${pid}`),
+    safeGet<CostumeNumber>(`/costumenumbers?productionId=${pid}`),
     safeGet<CostumeAssignment>(`/costumeassignments?productionId=${pid}`),
   ])
 }
@@ -579,6 +580,7 @@ async function deleteRole(role: Role) {
           :groups="groups"
           :number-casts="numberCasts"
           :costume-catalog="costumeCatalog"
+          :costume-numbers="costumeNumbers"
           :costume-assignments="costumeAssignments"
           :performer-name="performerName"
           :performer-age="performerAge"
@@ -995,7 +997,6 @@ async function deleteRole(role: Role) {
       :groups="groups"
       :performers="performers"
       :number-casts="numberCasts"
-      :costume-labels="costumeLabels"
       :catalog="costumeCatalog"
       @close="drawerNumber = null; reloadCostumes()"
       @catalog-changed="reloadCostumes"

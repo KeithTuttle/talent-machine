@@ -44,44 +44,58 @@ public static class CostumeChanges
         : "Costume";
 
     /// <summary>
-    /// What a performer wears in a number. An assigned catalog costume compares by
-    /// its ID ("c:12") so two numbers wearing the same costume always match — no
-    /// spelling to get wrong. Falls back to the number's costume label text for
-    /// numbers with nothing assigned. Empty = unknown, which never counts as a change.
+    /// Which catalog costume a performer wears in a number, or null if unknown.
+    /// Their explicit assignment wins; failing that, a number wearing exactly ONE
+    /// costume dresses everyone in it (that's why the drawer hides the per-kid
+    /// picker until there's a second costume to choose between). A number with
+    /// several costumes and no assignment is genuinely unknown.
     /// </summary>
-    public static string Identity(
+    public static int? CostumeIdFor(
         MusicalNumber number, int performerId,
         Dictionary<(int, int), CostumeAssignment> assignments,
-        Dictionary<int, Costume> costumes)
+        Dictionary<int, Costume> costumes,
+        ILookup<int, int> costumesByNumber)
     {
         if (assignments.TryGetValue((number.Id, performerId), out var a)
             && a.CostumeId is int costumeId
             && costumes.ContainsKey(costumeId))
         {
-            return $"c:{costumeId}";
+            return costumeId;
         }
-        var label = number.CostumeLabel?.Trim();
-        return string.IsNullOrEmpty(label) ? string.Empty : $"l:{label}";
+        var worn = costumesByNumber[number.Id].Where(costumes.ContainsKey).Distinct().ToList();
+        return worn.Count == 1 ? worn[0] : null;
+    }
+
+    /// <summary>
+    /// Comparable identity for a performer's costume in a number — the costume's ID,
+    /// so two numbers wearing the same catalog entry always match and there's no
+    /// spelling to get wrong. Empty = unknown, which never counts as a change.
+    /// </summary>
+    public static string Identity(
+        MusicalNumber number, int performerId,
+        Dictionary<(int, int), CostumeAssignment> assignments,
+        Dictionary<int, Costume> costumes,
+        ILookup<int, int> costumesByNumber)
+    {
+        var id = CostumeIdFor(number, performerId, assignments, costumes, costumesByNumber);
+        return id is null ? string.Empty : $"c:{id}";
     }
 
     /// <summary>Human-readable costume for a performer in a number (for the sheets).</summary>
     public static string DisplayCostume(
         MusicalNumber number, int performerId,
         Dictionary<(int, int), CostumeAssignment> assignments,
-        Dictionary<int, Costume> costumes)
+        Dictionary<int, Costume> costumes,
+        ILookup<int, int> costumesByNumber)
     {
-        if (assignments.TryGetValue((number.Id, performerId), out var a)
-            && a.CostumeId is int costumeId
-            && costumes.TryGetValue(costumeId, out var costume))
-        {
-            return LookName(costume);
-        }
-        return number.CostumeLabel?.Trim() ?? string.Empty;
+        var id = CostumeIdFor(number, performerId, assignments, costumes, costumesByNumber);
+        return id is int cid && costumes.TryGetValue(cid, out var costume) ? LookName(costume) : string.Empty;
     }
 
     public static List<CostumeChange> Detect(
         List<Act> acts, List<MusicalNumber> numbers, List<NumberCast> casts,
-        List<CostumeAssignment> assignments, List<Costume> costumeCatalog)
+        List<CostumeAssignment> assignments, List<Costume> costumeCatalog,
+        List<CostumeNumber> costumeNumbers)
     {
         var ordered = RunningOrder(acts, numbers);
         var position = new Dictionary<int, int>();
@@ -91,6 +105,7 @@ public static class CostumeChanges
         var assignmentByKey = assignments
             .GroupBy(a => (a.MusicalNumberId, a.PerformerId))
             .ToDictionary(g => g.Key, g => g.First());
+        var worn = costumeNumbers.ToLookup(cn => cn.MusicalNumberId, cn => cn.CostumeId);
 
         var changes = new List<CostumeChange>();
         foreach (var group in casts.ToLookup(c => c.PerformerId, c => c.MusicalNumberId))
@@ -109,15 +124,15 @@ public static class CostumeChanges
                 // An act break sits between them → intermission, never a rush.
                 if (from.ActId is not null && to.ActId is not null && from.ActId != to.ActId) continue;
 
-                var a = Identity(from, group.Key, assignmentByKey, costumeById);
-                var b = Identity(to, group.Key, assignmentByKey, costumeById);
+                var a = Identity(from, group.Key, assignmentByKey, costumeById, worn);
+                var b = Identity(to, group.Key, assignmentByKey, costumeById, worn);
                 if (a.Length == 0 || b.Length == 0) continue;
                 if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) continue;
 
                 changes.Add(new CostumeChange(
                     group.Key, from, to,
-                    DisplayCostume(from, group.Key, assignmentByKey, costumeById),
-                    DisplayCostume(to, group.Key, assignmentByKey, costumeById),
+                    DisplayCostume(from, group.Key, assignmentByKey, costumeById, worn),
+                    DisplayCostume(to, group.Key, assignmentByKey, costumeById, worn),
                     position[to.Id] - position[from.Id] - 1));
             }
         }

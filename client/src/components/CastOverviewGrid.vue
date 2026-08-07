@@ -13,8 +13,9 @@ import type {
   Act,
   CastGroup,
   CastMembership,
-  CostumeAssignment,
   Costume,
+  CostumeAssignment,
+  CostumeNumber,
   MusicalNumber,
   NumberCast,
 } from '@/types'
@@ -26,6 +27,7 @@ const props = defineProps<{
   groups: CastGroup[]
   numberCasts: NumberCast[]
   costumeCatalog: Costume[]
+  costumeNumbers: CostumeNumber[]
   costumeAssignments: CostumeAssignment[]
   performerName: (id: number) => string
   performerAge: (id: number) => number | null
@@ -99,12 +101,31 @@ const hasActHeaders = computed(() => props.acts.length > 0)
 
 // --- Costume colors ----------------------------------------------------------
 
-const costumeColors = computed(() => costumeColorMap(orderedNumbers.value.map((n) => n.costumeLabel)))
-const costumeColorOf = (n: MusicalNumber) => {
-  const key = n.costumeLabel?.trim().toLowerCase()
-  return key ? costumeColors.value.get(key) ?? null : null
+// Each catalog costume gets a stable color (keyed by id, so renaming one doesn't
+// reshuffle the palette). A number shows a swatch per costume it wears.
+const costumeColors = computed(() =>
+  costumeColorMap(props.costumeCatalog.map((c) => String(c.id))),
+)
+const costumeColorOf = (c: Costume) => costumeColors.value.get(String(c.id)) ?? null
+
+const costumesByNumber = computed(() => {
+  const m = new Map<number, Costume[]>()
+  for (const link of props.costumeNumbers) {
+    const costume = costumeById.value.get(link.costumeId)
+    if (!costume) continue
+    const list = m.get(link.musicalNumberId) ?? []
+    list.push(costume)
+    m.set(link.musicalNumberId, list)
+  }
+  for (const list of m.values()) list.sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id)
+  return m
+})
+const costumesOf = (n: MusicalNumber) => costumesByNumber.value.get(n.id) ?? []
+const costumeTitleOf = (n: MusicalNumber) => {
+  const list = costumesOf(n)
+  return list.length ? list.map((c) => c.name).join(' · ') : 'No costume set'
 }
-const hasCostumes = computed(() => orderedNumbers.value.some((n) => n.costumeLabel?.trim()))
+const hasCostumes = computed(() => props.costumeNumbers.length > 0)
 
 // --- Rows: cast members grouped by cast group --------------------------------
 
@@ -168,22 +189,18 @@ const notYetCast = computed(() => props.cast.filter((m) => (countByPerformer.val
 
 // --- Costume summary + quick-change -----------------------------------------
 
-const costumeSummary = computed(() => {
-  const groups = new Map<string, { color: string | null; numbers: MusicalNumber[] }>()
-  for (const n of orderedNumbers.value) {
-    const label = n.costumeLabel?.trim()
-    if (!label) continue
-    const key = label.toLowerCase()
-    if (!groups.has(key)) groups.set(key, { color: costumeColorOf(n), numbers: [] })
-    groups.get(key)!.numbers.push(n)
-  }
-  return [...groups.entries()].map(([, v], i) => ({
-    label: v.numbers[0].costumeLabel!,
-    color: v.color,
-    numbers: v.numbers,
-    key: i,
-  }))
-})
+/** The show's costumes and how many numbers wear each — the catalog at a glance. */
+const costumeSummary = computed(() =>
+  props.costumeCatalog
+    .map((c) => ({
+      key: c.id,
+      label: c.name,
+      color: costumeColorOf(c),
+      status: c.status,
+      count: orderedNumbers.value.filter((n) => costumesOf(n).some((x) => x.id === c.id)).length,
+    }))
+    .filter((c) => c.count > 0),
+)
 
 const costumeById = computed(() => {
   const m = new Map<number, Costume>()
@@ -207,8 +224,10 @@ const assignmentByKey = computed(() => {
 function costumeIdentity(n: MusicalNumber, performerId: number): string {
   const a = assignmentByKey.value.get(`${n.id}:${performerId}`)
   if (a?.costumeId != null && costumeById.value.has(a.costumeId)) return `c:${a.costumeId}`
-  const label = n.costumeLabel?.trim().toLowerCase()
-  return label ? `l:${label}` : ''
+  // No assignment: a number wearing exactly ONE costume dresses everyone in it.
+  // Several costumes and no assignment is genuinely unknown.
+  const worn = costumesOf(n)
+  return worn.length === 1 ? `c:${worn[0].id}` : ''
 }
 
 interface CostumeChange {
@@ -394,14 +413,20 @@ const bufferClass = (buffer: number) =>
                 :key="n.id"
                 class="border-b border-r border-border px-1 py-1"
                 :class="hoveredNumberId === n.id ? 'bg-primary/10' : ''"
-                :title="n.costumeLabel ?? 'No costume set'"
+                :title="costumeTitleOf(n)"
                 @mouseenter="hoveredNumberId = n.id"
               >
-                <span
-                  class="mx-auto block h-2.5 w-5 rounded-sm"
-                  :class="costumeColorOf(n) ? '' : 'border border-dashed border-border'"
-                  :style="costumeColorOf(n) ? { backgroundColor: costumeColorOf(n)! } : {}"
-                />
+                <!-- One swatch per costume the number wears (usually just one). -->
+                <span v-if="costumesOf(n).length === 0" class="mx-auto block h-2.5 w-5 rounded-sm border border-dashed border-border" />
+                <span v-else class="flex justify-center gap-px">
+                  <span
+                    v-for="c in costumesOf(n)"
+                    :key="c.id"
+                    class="block h-2.5 rounded-sm"
+                    :class="costumesOf(n).length > 1 ? 'w-2' : 'w-5'"
+                    :style="{ backgroundColor: costumeColorOf(c) ?? '#94a3b8' }"
+                  />
+                </span>
               </td>
               <td class="border-b border-border" />
             </tr>
@@ -480,7 +505,10 @@ const bufferClass = (buffer: number) =>
             <span v-for="c in costumeSummary" :key="c.key" class="flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs">
               <span class="inline-block h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: c.color ?? '#94a3b8' }" />
               {{ c.label }}
-              <span class="text-muted-foreground">· {{ c.numbers.length }}</span>
+              <span class="text-muted-foreground">· {{ c.count }}</span>
+              <span v-if="c.status !== 'Ready'" :class="c.status === 'Needed' ? 'text-destructive' : 'text-amber-600 dark:text-amber-500'">
+                {{ c.status === 'Needed' ? 'needed' : 'sourced' }}
+              </span>
             </span>
           </div>
         </div>

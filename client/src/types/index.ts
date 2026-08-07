@@ -103,8 +103,6 @@ export interface MusicalNumber {
   choreographerStaffId?: number | null
   /** Null = not taught yet. */
   teachStatus?: TeachStatus | null
-  /** Free-text costume label (color-coded in the grid, drives quick-change). */
-  costumeLabel?: string | null
   /** Null = not yet placed in the running order. */
   actId?: number | null
   /** Which scene this number sits inside; null = not nested under a scene. */

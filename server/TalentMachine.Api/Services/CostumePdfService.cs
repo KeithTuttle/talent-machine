@@ -108,8 +108,9 @@ public class CostumePdfService
                     t.Span(string.IsNullOrWhiteSpace(number.Title) ? "Untitled number" : number.Title)
                         .FontSize(13).SemiBold().FontColor(Colors.Black);
                 });
-                if (!string.IsNullOrWhiteSpace(number.CostumeLabel))
-                    row.ConstantItem(160).AlignRight().Text($"Costume: {number.CostumeLabel}")
+                if (costumes.Count > 0)
+                    row.ConstantItem(180).AlignRight()
+                        .Text(string.Join(" · ", costumes.Select(LookName)))
                         .SemiBold().FontColor(Colors.Grey.Darken2);
             });
 

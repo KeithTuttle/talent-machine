@@ -143,6 +143,8 @@ public class DashboardController : ControllerBase
         var costumeAssignments = await _db.CostumeAssignments
             .Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync();
         var acts = await _db.Acts.Where(a => a.ProductionId == productionId).ToListAsync();
+        var costumeNumbers = await _db.CostumeNumbers
+            .Where(cn => numberIds.Contains(cn.MusicalNumberId)).ToListAsync();
         var fittable = costumeAssignments.Where(a => a.CostumeId != null).ToList();
         var costumes = new CostumesDto(
             Total: catalog.Count,
@@ -154,7 +156,7 @@ public class DashboardController : ControllerBase
             // Count MOMENTS (a spot in the show needing a dresser), not per-kid
             // changes, so this matches the overview panel's grouped rows.
             QuickChanges: Services.CostumeChanges
-                .Detect(acts, numbers, casts, costumeAssignments, catalog)
+                .Detect(acts, numbers, casts, costumeAssignments, catalog, costumeNumbers)
                 .Where(c => c.Buffer == 0)
                 .Select(c => (c.From.Id, c.To.Id))
                 .Distinct().Count());

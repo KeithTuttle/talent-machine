@@ -34,7 +34,6 @@ const props = defineProps<{
   groups: CastGroup[]
   performers: Performer[]
   numberCasts: NumberCast[]
-  costumeLabels: string[]
   /** The production's costume catalog, so this number can reuse what exists. */
   catalog: Costume[]
 }>()
@@ -129,12 +128,6 @@ async function setChoreographer(staffId: number | null) {
     toast.error("Couldn't save the choreographer — please try again.")
   }
 }
-function useCostumeLabel(label: string) {
-  if (!props.number) return
-  props.number.costumeLabel = label
-  saveNumber()
-}
-
 // --- Costumes ----------------------------------------------------------------
 // Costumes live in the production's catalog and are REUSED across numbers; this
 // drawer manages which of them this number wears (and who's in each). Editing a
@@ -374,19 +367,6 @@ const castPerformers = computed(() =>
 
         <!-- Costumes tab -->
         <div v-else-if="tab === 'costumes'" class="space-y-4">
-          <label class="block space-y-1">
-            <span class="text-xs font-medium text-muted-foreground">Costume label</span>
-            <input v-model="number.costumeLabel" placeholder="e.g. Orphan rags" class="block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" @change="saveNumber" />
-            <p class="text-[11px] leading-snug text-muted-foreground">
-              Numbers sharing this name count as the same outfit — it drives the grid colors and
-              the quick-change warnings.
-            </p>
-            <div v-if="costumeLabels.length" class="flex flex-wrap gap-1 pt-1">
-              <span class="text-xs text-muted-foreground">Reuse:</span>
-              <button v-for="c in costumeLabels" :key="c" class="rounded-full border border-border px-2 py-0.5 text-xs hover:bg-accent" @click="useCostumeLabel(c)">{{ c }}</button>
-            </div>
-          </label>
-
           <!-- What they wear -->
           <div class="space-y-2">
             <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What they wear</span>

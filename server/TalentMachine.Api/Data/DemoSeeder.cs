@@ -184,8 +184,7 @@ public class DemoSeeder : IHostedService
         db.Acts.AddRange(act1, act2);
         await db.SaveChangesAsync();
 
-        MusicalNumber N(string title, int order, Act? act,
-            TeachStatus? teach = null, string? costume = null) => new()
+        MusicalNumber N(string title, int order, Act? act, TeachStatus? teach = null) => new()
         {
             ProductionId = annie.Id,
             Title = title,
@@ -194,16 +193,15 @@ public class DemoSeeder : IHostedService
             // Marcus Lee choreographs the show.
             ChoreographerStaffId = staff[1].Id,
             TeachStatus = teach,
-            CostumeLabel = costume,
         };
-        var maybe = N("Maybe", 1, act1, TeachStatus.Complete, "Orphan rags");
-        var hardKnock = N("It's the Hard-Knock Life", 2, act1, TeachStatus.Complete, "Orphan rags");
-        var tomorrow = N("Tomorrow", 3, act1, TeachStatus.Taught, "Annie dress");
-        var littleGirls = N("Little Girls", 4, act1, TeachStatus.NeedsReview, "Hannigan robe");
-        var nyc = N("N.Y.C.", 1, act2, TeachStatus.Taught, "Formal wear");
-        var easyStreet = N("Easy Street", 2, act2, null, "Rooster suit");
-        var reprise = N("Tomorrow (Reprise)", 3, act2, null, "Annie dress");
-        var finale = N("Finale: A New Deal for Christmas", 4, act2, null, "Formal wear");
+        var maybe = N("Maybe", 1, act1, TeachStatus.Complete);
+        var hardKnock = N("It's the Hard-Knock Life", 2, act1, TeachStatus.Complete);
+        var tomorrow = N("Tomorrow", 3, act1, TeachStatus.Taught);
+        var littleGirls = N("Little Girls", 4, act1, TeachStatus.NeedsReview);
+        var nyc = N("N.Y.C.", 1, act2, TeachStatus.Taught);
+        var easyStreet = N("Easy Street", 2, act2);
+        var reprise = N("Tomorrow (Reprise)", 3, act2);
+        var finale = N("Finale: A New Deal for Christmas", 4, act2);
         var uncast = N("I Don't Need Anything But You", 1, null);
         db.Numbers.AddRange(maybe, hardKnock, tomorrow, littleGirls, nyc, easyStreet, reprise, finale, uncast);
         await db.SaveChangesAsync();
@@ -279,20 +277,28 @@ public class DemoSeeder : IHostedService
             new PropAssignment { PropId = radio.Id, SceneId = scMansion.Id, PresetLocation = "On the desk", Handler = "Preset", StrikeTo = "Leave on desk" });
         await db.SaveChangesAsync();
 
-        // --- Costumes: a reusable catalog, linked to numbers ------------------
+        // --- Costumes: a reusable catalog, linked to the numbers that wear it --
         var cOrphan = new Costume { ProductionId = annie.Id, Name = "Orphan rags", Description = "Gray orphan smock", Accessories = "Rope belt", Shoes = "Scuffed black flats", OrderIndex = 1 };
         var cAnnieDress = new Costume { ProductionId = annie.Id, Name = "Annie dress", Description = "Red Annie dress", Accessories = "White collar", Shoes = "Black Mary Janes", VendorUrl = "https://example.com/annie-dress", Status = CostumeStatus.Ready, OrderIndex = 2 };
-        var cGown = new Costume { ProductionId = annie.Id, Name = "Formal gown", Description = "1930s formal gown", Status = CostumeStatus.Sourced, OrderIndex = 3 };
-        var cSuit = new Costume { ProductionId = annie.Id, Name = "Pinstripe suit", Description = "Pinstripe suit", Shoes = "Dress oxfords", Status = CostumeStatus.Sourced, OrderIndex = 4 };
-        db.Costumes.AddRange(cOrphan, cAnnieDress, cGown, cSuit);
+        var cHannigan = new Costume { ProductionId = annie.Id, Name = "Hannigan robe", Description = "Shabby dressing gown", Status = CostumeStatus.Sourced, OrderIndex = 3 };
+        var cGown = new Costume { ProductionId = annie.Id, Name = "Formal gown", Description = "1930s formal gown", Status = CostumeStatus.Sourced, OrderIndex = 4 };
+        var cSuit = new Costume { ProductionId = annie.Id, Name = "Pinstripe suit", Description = "Pinstripe suit", Shoes = "Dress oxfords", Status = CostumeStatus.Sourced, OrderIndex = 5 };
+        var cRooster = new Costume { ProductionId = annie.Id, Name = "Rooster suit", Description = "Sharp checked suit", OrderIndex = 6 };
+        db.Costumes.AddRange(cOrphan, cAnnieDress, cHannigan, cGown, cSuit, cRooster);
         await db.SaveChangesAsync();
 
-        // Which numbers wear what — N.Y.C. wears two, split across the cast.
+        // Costumes are reused across numbers — orphan rags twice, the Annie dress
+        // twice — and N.Y.C. wears two at once, split across the cast.
         db.CostumeNumbers.AddRange(
+            new CostumeNumber { CostumeId = cOrphan.Id, MusicalNumberId = maybe.Id },
             new CostumeNumber { CostumeId = cOrphan.Id, MusicalNumberId = hardKnock.Id },
             new CostumeNumber { CostumeId = cAnnieDress.Id, MusicalNumberId = tomorrow.Id },
+            new CostumeNumber { CostumeId = cAnnieDress.Id, MusicalNumberId = reprise.Id },
+            new CostumeNumber { CostumeId = cHannigan.Id, MusicalNumberId = littleGirls.Id },
             new CostumeNumber { CostumeId = cGown.Id, MusicalNumberId = nyc.Id },
-            new CostumeNumber { CostumeId = cSuit.Id, MusicalNumberId = nyc.Id });
+            new CostumeNumber { CostumeId = cSuit.Id, MusicalNumberId = nyc.Id },
+            new CostumeNumber { CostumeId = cGown.Id, MusicalNumberId = finale.Id },
+            new CostumeNumber { CostumeId = cRooster.Id, MusicalNumberId = easyStreet.Id });
         db.CostumeAssignments.AddRange(
             new CostumeAssignment { MusicalNumberId = tomorrow.Id, PerformerId = kids[0].Id, CostumeId = cAnnieDress.Id, Size = "CH 10", Notes = "Hem taken up 1\"", IsFitted = true },
             new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[4].Id, CostumeId = cOrphan.Id, Size = "CH 8" },

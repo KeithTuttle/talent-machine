@@ -14,6 +14,7 @@ public class CostumePlotData
     public List<NumberCast> NumberCasts { get; set; } = new();
     public List<CostumeAssignment> Assignments { get; set; } = new();
     public List<Costume> Costumes { get; set; } = new();
+    public List<CostumeNumber> CostumeNumbers { get; set; } = new();
     public List<Performer> Performers { get; set; } = new();
     public List<CastMembership> Cast { get; set; } = new();
 }
@@ -32,6 +33,7 @@ public class CostumePlotPdfService
         for (var i = 0; i < ordered.Count; i++) position[ordered[i].Id] = i;
 
         var costumeById = data.Costumes.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
+        var worn = data.CostumeNumbers.ToLookup(cn => cn.MusicalNumberId, cn => cn.CostumeId);
         var assignmentByKey = data.Assignments
             .GroupBy(a => (a.MusicalNumberId, a.PerformerId))
             .ToDictionary(g => g.Key, g => g.First());
@@ -82,7 +84,7 @@ public class CostumePlotPdfService
                             .ToList();
 
                         col.Item().Element(c => ComposePerformer(
-                            c, p, appearances, assignmentByKey, costumeById, actName));
+                            c, p, appearances, assignmentByKey, costumeById, worn, actName));
                     }
                 });
 
@@ -105,6 +107,7 @@ public class CostumePlotPdfService
         IContainer container, Performer performer, List<MusicalNumber> appearances,
         Dictionary<(int, int), CostumeAssignment> assignments,
         Dictionary<int, Costume> costumes,
+        ILookup<int, int> costumesByNumber,
         Dictionary<int, string> actName)
     {
         container.Border(1).BorderColor(Colors.Grey.Lighten2).Padding(8).Column(col =>
@@ -122,9 +125,8 @@ public class CostumePlotPdfService
             foreach (var n in appearances)
             {
                 assignments.TryGetValue((n.Id, performer.Id), out var a);
-                var costume = a?.CostumeId is int cid && costumes.TryGetValue(cid, out var entry)
-                    ? CostumeChanges.LookName(entry)
-                    : n.CostumeLabel?.Trim();
+                var costume = CostumeChanges.DisplayCostume(
+                    n, performer.Id, assignments, costumes, costumesByNumber);
                 var changed = previous is not null && !string.IsNullOrWhiteSpace(costume)
                     && !string.Equals(previous, costume, StringComparison.OrdinalIgnoreCase);
 
