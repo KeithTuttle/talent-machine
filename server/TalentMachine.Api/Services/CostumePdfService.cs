@@ -11,7 +11,8 @@ public class CostumeSheetData
     public string ProductionTitle { get; set; } = string.Empty;
     public List<Act> Acts { get; set; } = new();
     public List<MusicalNumber> Numbers { get; set; } = new();
-    public List<CostumePiece> Pieces { get; set; } = new();
+    public List<Costume> Costumes { get; set; } = new();
+    public List<CostumeNumber> CostumeNumbers { get; set; } = new();
     public List<CostumeAssignment> Assignments { get; set; } = new();
     public List<NumberCast> NumberCasts { get; set; } = new();
     public List<Performer> Performers { get; set; } = new();
@@ -19,9 +20,9 @@ public class CostumeSheetData
 
 /// <summary>
 /// A high-contrast, backstage-readable costume sheet: every number in running
-/// order with its costume label, the pieces (split Boys/Girls where set, with
-/// accessories/shoes and vendor/photo links), and the kids who wear it — with
-/// sizes and alteration notes, and on-stage extras (not in the number) flagged.
+/// order with its costume label, the costumes it wears (with accessories/shoes
+/// and vendor/photo links), and the kids in each — with sizes and alteration
+/// notes, and on-stage extras (not in the number) flagged.
 /// </summary>
 public class CostumePdfService
 {
@@ -30,8 +31,17 @@ public class CostumePdfService
         var performerName = data.Performers.ToDictionary(p => p.Id, p => $"{p.FirstName} {p.LastName}".Trim());
         var performerGender = data.Performers.ToDictionary(p => p.Id, p => p.Gender);
         var castByNumber = data.NumberCasts.ToLookup(c => c.MusicalNumberId, c => c.PerformerId);
-        var piecesByNumber = data.Pieces.ToLookup(p => p.MusicalNumberId);
         var assignmentsByNumber = data.Assignments.ToLookup(a => a.MusicalNumberId);
+        var costumeById = data.Costumes.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
+        // Costumes a number wears: its explicit links, plus any a kid is assigned
+        // (so an assignment can never be orphaned off the sheet).
+        var costumesByNumber = data.CostumeNumbers
+            .Select(cn => (cn.MusicalNumberId, cn.CostumeId))
+            .Concat(data.Assignments.Where(a => a.CostumeId != null)
+                .Select(a => (a.MusicalNumberId, CostumeId: a.CostumeId!.Value)))
+            .Distinct()
+            .Where(x => costumeById.ContainsKey(x.CostumeId))
+            .ToLookup(x => x.MusicalNumberId, x => costumeById[x.CostumeId]);
 
         var ordered = CostumeChanges.RunningOrder(data.Acts, data.Numbers);
 
@@ -62,7 +72,8 @@ public class CostumePdfService
                     {
                         var n = ordered[i];
                         col.Item().Element(c => ComposeNumber(
-                            c, i + 1, n, piecesByNumber[n.Id].ToList(), assignmentsByNumber[n.Id].ToList(),
+                            c, i + 1, n, costumesByNumber[n.Id].OrderBy(x => x.Name).ToList(),
+                            assignmentsByNumber[n.Id].ToList(),
                             castByNumber[n.Id].ToHashSet(), performerName, performerGender));
                     }
                 });
@@ -84,7 +95,7 @@ public class CostumePdfService
 
     private void ComposeNumber(
         IContainer container, int runningNumber, MusicalNumber number,
-        List<CostumePiece> pieces, List<CostumeAssignment> assignments, HashSet<int> cast,
+        List<Costume> costumes, List<CostumeAssignment> assignments, HashSet<int> cast,
         Dictionary<int, string> performerName, Dictionary<int, Gender?> performerGender)
     {
         container.Border(1).BorderColor(Colors.Grey.Lighten2).Padding(8).Column(col =>
@@ -102,13 +113,13 @@ public class CostumePdfService
                         .SemiBold().FontColor(Colors.Grey.Darken2);
             });
 
-            // Pieces (specs).
-            if (pieces.Count > 0)
+            // The costumes this number wears.
+            if (costumes.Count > 0)
             {
                 col.Item().PaddingTop(4).Column(pc =>
                 {
-                    foreach (var p in pieces.OrderBy(p => p.Gender))
-                        pc.Item().PaddingTop(2).Element(c => ComposePiece(c, p));
+                    foreach (var costume in costumes)
+                        pc.Item().PaddingTop(2).Element(c => ComposePiece(c, costume));
                 });
             }
 
@@ -121,26 +132,26 @@ public class CostumePdfService
                 col.Item().PaddingTop(6).Text("Who wears it").FontSize(9).SemiBold().FontColor(Colors.Grey.Darken2);
 
                 string Named(int id) => performerName.GetValueOrDefault(id, $"#{id}");
-                var looksUsed = pieces.Count > 0
-                    && wearerIds.Any(id => byPerformer.TryGetValue(id, out var a) && a.CostumePieceId is not null);
+                var looksUsed = costumes.Count > 0
+                    && wearerIds.Any(id => byPerformer.TryGetValue(id, out var a) && a.CostumeId is not null);
 
                 if (looksUsed)
                 {
-                    foreach (var piece in pieces)
+                    foreach (var costume in costumes)
                     {
                         var ids = wearerIds
-                            .Where(id => byPerformer.TryGetValue(id, out var a) && a.CostumePieceId == piece.Id)
+                            .Where(id => byPerformer.TryGetValue(id, out var a) && a.CostumeId == costume.Id)
                             .OrderBy(Named).ToList();
                         if (ids.Count == 0) continue;
-                        col.Item().PaddingTop(3).Text(LookName(piece)).FontSize(9).SemiBold().FontColor(Colors.Grey.Darken3);
+                        col.Item().PaddingTop(3).Text(LookName(costume)).FontSize(9).SemiBold().FontColor(Colors.Grey.Darken3);
                         foreach (var id in ids) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named));
                     }
                     var noLook = wearerIds
-                        .Where(id => !byPerformer.TryGetValue(id, out var a) || a.CostumePieceId is null)
+                        .Where(id => !byPerformer.TryGetValue(id, out var a) || a.CostumeId is null)
                         .OrderBy(Named).ToList();
                     if (noLook.Count > 0)
                     {
-                        col.Item().PaddingTop(3).Text("No look assigned").FontSize(9).SemiBold().FontColor(Colors.Grey.Medium);
+                        col.Item().PaddingTop(3).Text("No costume assigned").FontSize(9).SemiBold().FontColor(Colors.Grey.Medium);
                         foreach (var id in noLook) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named));
                     }
                 }
@@ -153,7 +164,7 @@ public class CostumePdfService
         });
     }
 
-    private static string LookName(CostumePiece p) => CostumeChanges.LookName(p);
+    private static string LookName(Costume c) => CostumeChanges.LookName(c);
 
     private void ComposeWearer(
         IContainer container, int id, HashSet<int> cast,
@@ -167,19 +178,16 @@ public class CostumePdfService
             if (extra) t.Span("  (on stage, not in number)").FontSize(8).FontColor(Colors.Orange.Darken2);
             if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  — size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
             if (!string.IsNullOrWhiteSpace(a?.Notes)) t.Span($"  ({a!.Notes})").FontSize(9).Italic().FontColor(Colors.Grey.Medium);
-            if (a is { CostumePieceId: not null, IsFitted: false })
+            if (a is { CostumeId: not null, IsFitted: false })
                 t.Span("  needs fitting").FontSize(8).Italic().FontColor(Colors.Red.Medium);
         });
     }
 
-    private void ComposePiece(IContainer container, CostumePiece p)
+    private void ComposePiece(IContainer container, Costume p)
     {
         container.Column(col =>
         {
-            var lead = new List<string>();
-            if (!string.IsNullOrWhiteSpace(p.Label)) lead.Add(p.Label!.Trim());
-            if (p.Gender != CostumeGender.All) lead.Add($"[{p.Gender}]");
-            var label = lead.Count > 0 ? string.Join(" ", lead) + " " : "";
+            var label = string.IsNullOrWhiteSpace(p.Name) ? "" : p.Name.Trim() + " ";
             col.Item().Text(t =>
             {
                 t.Span(label).SemiBold().FontColor(Colors.Grey.Darken2);

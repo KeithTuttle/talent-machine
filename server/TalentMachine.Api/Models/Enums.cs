@@ -51,13 +51,6 @@ public enum TeachStatus
     Complete,
 }
 
-public enum CostumeGender
-{
-    All,
-    Boys,
-    Girls,
-}
-
 /// <summary>Where a prop is in the gathering process. Default = Needed.</summary>
 public enum PropStatus
 {

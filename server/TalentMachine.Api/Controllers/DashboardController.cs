@@ -139,22 +139,22 @@ public class DashboardController : ControllerBase
         // --- Costume readiness ---
         // Fittings only count for kids actually put in a costume; an unassigned kid
         // isn't "unfitted", there's just nothing to fit them in yet.
-        var pieces = await _db.CostumePieces.Where(p => numberIds.Contains(p.MusicalNumberId)).ToListAsync();
+        var catalog = await _db.Costumes.Where(c => c.ProductionId == productionId).ToListAsync();
         var costumeAssignments = await _db.CostumeAssignments
             .Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync();
         var acts = await _db.Acts.Where(a => a.ProductionId == productionId).ToListAsync();
-        var fittable = costumeAssignments.Where(a => a.CostumePieceId != null).ToList();
+        var fittable = costumeAssignments.Where(a => a.CostumeId != null).ToList();
         var costumes = new CostumesDto(
-            Total: pieces.Count,
-            Ready: pieces.Count(p => p.Status == CostumeStatus.Ready),
-            Sourced: pieces.Count(p => p.Status == CostumeStatus.Sourced),
-            Needed: pieces.Count(p => p.Status == CostumeStatus.Needed),
+            Total: catalog.Count,
+            Ready: catalog.Count(c => c.Status == CostumeStatus.Ready),
+            Sourced: catalog.Count(c => c.Status == CostumeStatus.Sourced),
+            Needed: catalog.Count(c => c.Status == CostumeStatus.Needed),
             FittingsDone: fittable.Count(a => a.IsFitted),
             FittingsTotal: fittable.Count,
             // Count MOMENTS (a spot in the show needing a dresser), not per-kid
             // changes, so this matches the overview panel's grouped rows.
             QuickChanges: Services.CostumeChanges
-                .Detect(acts, numbers, casts, costumeAssignments, pieces)
+                .Detect(acts, numbers, casts, costumeAssignments, catalog)
                 .Where(c => c.Buffer == 0)
                 .Select(c => (c.From.Id, c.To.Id))
                 .Distinct().Count());

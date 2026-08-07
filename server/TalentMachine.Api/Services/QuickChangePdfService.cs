@@ -13,7 +13,7 @@ public class QuickChangeData
     public List<MusicalNumber> Numbers { get; set; } = new();
     public List<NumberCast> NumberCasts { get; set; } = new();
     public List<CostumeAssignment> Assignments { get; set; } = new();
-    public List<CostumePiece> Pieces { get; set; } = new();
+    public List<Costume> Costumes { get; set; } = new();
     public List<Performer> Performers { get; set; } = new();
 }
 
@@ -28,7 +28,7 @@ public class QuickChangePdfService
     {
         var performerName = data.Performers.ToDictionary(p => p.Id, p => $"{p.FirstName} {p.LastName}".Trim());
         var changes = CostumeChanges.Detect(
-            data.Acts, data.Numbers, data.NumberCasts, data.Assignments, data.Pieces);
+            data.Acts, data.Numbers, data.NumberCasts, data.Assignments, data.Costumes);
 
         // Kids changing at the same moment (same two numbers, same costumes) share
         // a row — that's how it happens backstage.

@@ -13,7 +13,7 @@ public class CostumePlotData
     public List<MusicalNumber> Numbers { get; set; } = new();
     public List<NumberCast> NumberCasts { get; set; } = new();
     public List<CostumeAssignment> Assignments { get; set; } = new();
-    public List<CostumePiece> Pieces { get; set; } = new();
+    public List<Costume> Costumes { get; set; } = new();
     public List<Performer> Performers { get; set; } = new();
     public List<CastMembership> Cast { get; set; } = new();
 }
@@ -31,7 +31,7 @@ public class CostumePlotPdfService
         var position = new Dictionary<int, int>();
         for (var i = 0; i < ordered.Count; i++) position[ordered[i].Id] = i;
 
-        var pieceById = data.Pieces.GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First());
+        var costumeById = data.Costumes.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
         var assignmentByKey = data.Assignments
             .GroupBy(a => (a.MusicalNumberId, a.PerformerId))
             .ToDictionary(g => g.Key, g => g.First());
@@ -82,7 +82,7 @@ public class CostumePlotPdfService
                             .ToList();
 
                         col.Item().Element(c => ComposePerformer(
-                            c, p, appearances, assignmentByKey, pieceById, actName));
+                            c, p, appearances, assignmentByKey, costumeById, actName));
                     }
                 });
 
@@ -104,7 +104,7 @@ public class CostumePlotPdfService
     private void ComposePerformer(
         IContainer container, Performer performer, List<MusicalNumber> appearances,
         Dictionary<(int, int), CostumeAssignment> assignments,
-        Dictionary<int, CostumePiece> pieces,
+        Dictionary<int, Costume> costumes,
         Dictionary<int, string> actName)
     {
         container.Border(1).BorderColor(Colors.Grey.Lighten2).Padding(8).Column(col =>
@@ -122,8 +122,8 @@ public class CostumePlotPdfService
             foreach (var n in appearances)
             {
                 assignments.TryGetValue((n.Id, performer.Id), out var a);
-                var costume = a?.CostumePieceId is int pid && pieces.TryGetValue(pid, out var piece)
-                    ? CostumeChanges.LookName(piece)
+                var costume = a?.CostumeId is int cid && costumes.TryGetValue(cid, out var entry)
+                    ? CostumeChanges.LookName(entry)
                     : n.CostumeLabel?.Trim();
                 var changed = previous is not null && !string.IsNullOrWhiteSpace(costume)
                     && !string.Equals(previous, costume, StringComparison.OrdinalIgnoreCase);
@@ -138,7 +138,7 @@ public class CostumePlotPdfService
                         .SemiBold().FontColor(string.IsNullOrWhiteSpace(costume) ? Colors.Grey.Medium : Colors.Black);
                     if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
                     if (changed) t.Span("   ← CHANGE").FontSize(8).SemiBold().FontColor(Colors.Orange.Darken2);
-                    if (a is { IsFitted: false } && !string.IsNullOrWhiteSpace(costume))
+                    if (a is { CostumeId: not null, IsFitted: false })
                         t.Span("   needs fitting").FontSize(8).Italic().FontColor(Colors.Red.Medium);
                 });
 

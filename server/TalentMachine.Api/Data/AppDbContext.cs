@@ -40,7 +40,8 @@ public class AppDbContext : DbContext
     public DbSet<Act> Acts => Set<Act>();
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<ProductionStaff> ProductionStaff => Set<ProductionStaff>();
-    public DbSet<CostumePiece> CostumePieces => Set<CostumePiece>();
+    public DbSet<Costume> Costumes => Set<Costume>();
+    public DbSet<CostumeNumber> CostumeNumbers => Set<CostumeNumber>();
     public DbSet<CostumeAssignment> CostumeAssignments => Set<CostumeAssignment>();
     public DbSet<Formation> Formations => Set<Formation>();
     public DbSet<Scene> Scenes => Set<Scene>();
@@ -73,8 +74,7 @@ public class AppDbContext : DbContext
         b.Entity<RehearsalAttendance>().Property(x => x.Status).HasConversion<string>();
         b.Entity<ProductionStaff>().Property(x => x.Role).HasConversion<string>();
         b.Entity<MusicalNumber>().Property(x => x.TeachStatus).HasConversion<string>();
-        b.Entity<CostumePiece>().Property(x => x.Gender).HasConversion<string>();
-        b.Entity<CostumePiece>().Property(x => x.Status).HasConversion<string>();
+        b.Entity<Costume>().Property(x => x.Status).HasConversion<string>();
         b.Entity<Prop>().Property(x => x.Status).HasConversion<string>();
 
         // Composite keys (join rows without a store-generated Id).
@@ -86,6 +86,7 @@ public class AppDbContext : DbContext
         b.Entity<ProductionStaff>().HasKey(x => new { x.ProductionId, x.StaffMemberId, x.Role });
         b.Entity<SceneCharacter>().HasKey(x => new { x.SceneId, x.RoleId });
         b.Entity<NumberCharacter>().HasKey(x => new { x.MusicalNumberId, x.RoleId });
+        b.Entity<CostumeNumber>().HasKey(x => new { x.CostumeId, x.MusicalNumberId });
 
         // A Clerk user can belong to several companies, but only once each.
         b.Entity<Membership>().HasIndex(x => new { x.ClerkUserId, x.TenantId }).IsUnique();
@@ -168,8 +169,12 @@ public class AppDbContext : DbContext
             .HasOne(x => x.StaffMember).WithMany().HasForeignKey(x => x.StaffMemberId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Costumes die with their number; assignments also with the performer.
-        b.Entity<CostumePiece>()
+        // Costume catalog entries die with the show; their per-number links and
+        // per-kid assignments die with either side.
+        b.Entity<CostumeNumber>()
+            .HasOne(x => x.Costume).WithMany().HasForeignKey(x => x.CostumeId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<CostumeNumber>()
             .HasOne(x => x.MusicalNumber).WithMany().HasForeignKey(x => x.MusicalNumberId)
             .OnDelete(DeleteBehavior.Cascade);
         b.Entity<CostumeAssignment>()
@@ -178,11 +183,12 @@ public class AppDbContext : DbContext
         b.Entity<CostumeAssignment>()
             .HasOne(x => x.Performer).WithMany().HasForeignKey(x => x.PerformerId)
             .OnDelete(DeleteBehavior.Cascade);
-        // Deleting a look (piece) leaves its wearers assigned but "unassigned look".
+        // Deleting a costume leaves its wearers in place, just unassigned.
         b.Entity<CostumeAssignment>()
-            .HasOne(x => x.CostumePiece).WithMany().HasForeignKey(x => x.CostumePieceId)
+            .HasOne(x => x.Costume).WithMany().HasForeignKey(x => x.CostumeId)
             .OnDelete(DeleteBehavior.SetNull);
         b.Entity<CostumeAssignment>().HasIndex(x => new { x.MusicalNumberId, x.PerformerId }).IsUnique();
+        b.Entity<Costume>().HasIndex(x => new { x.ProductionId, x.OrderIndex });
 
         // Formations die with their number; coordinates stored as jsonb.
         b.Entity<Formation>()

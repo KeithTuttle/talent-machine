@@ -7,7 +7,11 @@ using TalentMachine.Api.Services;
 
 namespace TalentMachine.Api.Controllers;
 
-/// <summary>The printable backstage costume sheet for a production.</summary>
+/// <summary>
+/// The production's costume catalog (reusable across numbers) plus the printable
+/// backstage sheets. Mirrors PropsController: catalog CRUD here, per-number use
+/// on CostumeNumbersController, per-kid detail on CostumeAssignmentsController.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class CostumesController : ControllerBase
@@ -19,6 +23,59 @@ public class CostumesController : ControllerBase
     {
         _db = db;
         _tenant = tenant;
+    }
+
+    // GET /api/costumes?productionId=
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<Costume>>> GetAll([FromQuery] int? productionId)
+    {
+        var query = _db.Costumes.AsQueryable();
+        var accessible = _tenant.AccessibleProductionIds;
+        if (accessible is not null) query = query.Where(c => accessible.Contains(c.ProductionId));
+        if (productionId is not null) query = query.Where(c => c.ProductionId == productionId);
+        return await query.OrderBy(c => c.OrderIndex).ThenBy(c => c.Name).ToListAsync();
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<Costume>> Get(int id)
+    {
+        var costume = await _db.FindScopedAsync<Costume>(id);
+        if (costume is null || !_tenant.CanAccessProduction(costume.ProductionId)) return NotFound();
+        return costume;
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<Costume>> Create(Costume costume)
+    {
+        if (!_tenant.CanAccessProduction(costume.ProductionId)) return StatusCode(403);
+        if (costume.OrderIndex == 0)
+        {
+            var max = await _db.Costumes
+                .Where(c => c.ProductionId == costume.ProductionId)
+                .MaxAsync(c => (int?)c.OrderIndex) ?? 0;
+            costume.OrderIndex = max + 1;
+        }
+        _db.Costumes.Add(costume);
+        await _db.SaveChangesAsync();
+        return CreatedAtAction(nameof(Get), new { id = costume.Id }, costume);
+    }
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, Costume input)
+    {
+        if (id != input.Id) return BadRequest();
+        if (!_tenant.CanAccessProduction(input.ProductionId)) return NotFound();
+        return await _db.UpdateScopedAsync(id, input) ? NoContent() : NotFound();
+    }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var costume = await _db.FindScopedAsync<Costume>(id);
+        if (costume is null || !_tenant.CanAccessProduction(costume.ProductionId)) return NotFound();
+        _db.Costumes.Remove(costume);
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 
     // GET /api/costumes/pdf?productionId=
@@ -37,7 +94,8 @@ public class CostumesController : ControllerBase
             ProductionTitle = production.Title,
             Acts = await _db.Acts.Where(a => a.ProductionId == productionId).ToListAsync(),
             Numbers = numbers,
-            Pieces = await _db.CostumePieces.Where(p => numberIds.Contains(p.MusicalNumberId)).ToListAsync(),
+            Costumes = await _db.Costumes.Where(c => c.ProductionId == productionId).ToListAsync(),
+            CostumeNumbers = await _db.CostumeNumbers.Where(cn => numberIds.Contains(cn.MusicalNumberId)).ToListAsync(),
             Assignments = await _db.CostumeAssignments.Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync(),
             NumberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync(),
             Performers = await _db.Performers.ToListAsync(),
@@ -65,7 +123,7 @@ public class CostumesController : ControllerBase
             Numbers = numbers,
             NumberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync(),
             Assignments = await _db.CostumeAssignments.Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync(),
-            Pieces = await _db.CostumePieces.Where(p => numberIds.Contains(p.MusicalNumberId)).ToListAsync(),
+            Costumes = await _db.Costumes.Where(c => c.ProductionId == productionId).ToListAsync(),
             Performers = await _db.Performers.ToListAsync(),
         };
 
@@ -91,7 +149,7 @@ public class CostumesController : ControllerBase
             Numbers = numbers,
             NumberCasts = await _db.NumberCasts.Where(c => numberIds.Contains(c.MusicalNumberId)).ToListAsync(),
             Assignments = await _db.CostumeAssignments.Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync(),
-            Pieces = await _db.CostumePieces.Where(p => numberIds.Contains(p.MusicalNumberId)).ToListAsync(),
+            Costumes = await _db.Costumes.Where(c => c.ProductionId == productionId).ToListAsync(),
             Performers = await _db.Performers.ToListAsync(),
             Cast = await _db.CastMemberships.Where(m => m.ProductionId == productionId).ToListAsync(),
         };

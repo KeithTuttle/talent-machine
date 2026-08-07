@@ -14,7 +14,7 @@ import type {
   CastGroup,
   CastMembership,
   CostumeAssignment,
-  CostumePiece,
+  Costume,
   MusicalNumber,
   NumberCast,
 } from '@/types'
@@ -25,7 +25,7 @@ const props = defineProps<{
   cast: CastMembership[]
   groups: CastGroup[]
   numberCasts: NumberCast[]
-  costumePieces: CostumePiece[]
+  costumeCatalog: Costume[]
   costumeAssignments: CostumeAssignment[]
   performerName: (id: number) => string
   performerAge: (id: number) => number | null
@@ -185,9 +185,9 @@ const costumeSummary = computed(() => {
   }))
 })
 
-const pieceById = computed(() => {
-  const m = new Map<number, CostumePiece>()
-  for (const p of props.costumePieces) m.set(p.id, p)
+const costumeById = computed(() => {
+  const m = new Map<number, Costume>()
+  for (const c of props.costumeCatalog) m.set(c.id, c)
   return m
 })
 const assignmentByKey = computed(() => {
@@ -196,19 +196,19 @@ const assignmentByKey = computed(() => {
   return m
 })
 
-/** A performer's costume in a number: the name of the look they're assigned to,
- * falling back to the number's costume label when they have no look. Empty string
- * = unknown (don't compare). This is what makes changes per-performer: a kid
- * who stays a "Bear" across two numbers isn't flagged even if the numbers' overall
- * labels differ, and only the kids who actually change are listed. */
+/** A performer's costume in a number. An assigned catalog costume compares by its
+ * ID, so two numbers wearing the same costume always match — no spelling to get
+ * wrong. Falls back to the number's costume label text. Empty string = unknown
+ * (don't compare). This is what makes changes per-performer: a kid who stays a
+ * "Bear" across two numbers isn't flagged even if the numbers' overall labels
+ * differ, and only the kids who actually change are listed.
+ *
+ * Mirrors CostumeChanges.Identity on the server (used by the printed sheets). */
 function costumeIdentity(n: MusicalNumber, performerId: number): string {
   const a = assignmentByKey.value.get(`${n.id}:${performerId}`)
-  if (a?.costumePieceId != null) {
-    const p = pieceById.value.get(a.costumePieceId)
-    const look = p?.label?.trim() || p?.description?.trim()
-    if (look) return look.toLowerCase()
-  }
-  return n.costumeLabel?.trim().toLowerCase() ?? ''
+  if (a?.costumeId != null && costumeById.value.has(a.costumeId)) return `c:${a.costumeId}`
+  const label = n.costumeLabel?.trim().toLowerCase()
+  return label ? `l:${label}` : ''
 }
 
 interface CostumeChange {

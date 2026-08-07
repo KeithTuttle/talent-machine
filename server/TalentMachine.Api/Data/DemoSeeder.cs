@@ -279,17 +279,25 @@ public class DemoSeeder : IHostedService
             new PropAssignment { PropId = radio.Id, SceneId = scMansion.Id, PresetLocation = "On the desk", Handler = "Preset", StrikeTo = "Leave on desk" });
         await db.SaveChangesAsync();
 
-        // --- Costumes: pieces + a few sizes, incl. an on-stage extra ---------
-        db.CostumePieces.AddRange(
-            new CostumePiece { MusicalNumberId = hardKnock.Id, Gender = CostumeGender.All, Description = "Gray orphan smock", Accessories = "Rope belt", Shoes = "Scuffed black flats" },
-            new CostumePiece { MusicalNumberId = tomorrow.Id, Gender = CostumeGender.Girls, Description = "Red Annie dress", Accessories = "White collar", Shoes = "Black Mary Janes", VendorUrl = "https://example.com/annie-dress" },
-            new CostumePiece { MusicalNumberId = nyc.Id, Gender = CostumeGender.Girls, Description = "1930s formal gown" },
-            new CostumePiece { MusicalNumberId = nyc.Id, Gender = CostumeGender.Boys, Description = "Pinstripe suit", Shoes = "Dress oxfords" });
+        // --- Costumes: a reusable catalog, linked to numbers ------------------
+        var cOrphan = new Costume { ProductionId = annie.Id, Name = "Orphan rags", Description = "Gray orphan smock", Accessories = "Rope belt", Shoes = "Scuffed black flats", OrderIndex = 1 };
+        var cAnnieDress = new Costume { ProductionId = annie.Id, Name = "Annie dress", Description = "Red Annie dress", Accessories = "White collar", Shoes = "Black Mary Janes", VendorUrl = "https://example.com/annie-dress", Status = CostumeStatus.Ready, OrderIndex = 2 };
+        var cGown = new Costume { ProductionId = annie.Id, Name = "Formal gown", Description = "1930s formal gown", Status = CostumeStatus.Sourced, OrderIndex = 3 };
+        var cSuit = new Costume { ProductionId = annie.Id, Name = "Pinstripe suit", Description = "Pinstripe suit", Shoes = "Dress oxfords", Status = CostumeStatus.Sourced, OrderIndex = 4 };
+        db.Costumes.AddRange(cOrphan, cAnnieDress, cGown, cSuit);
+        await db.SaveChangesAsync();
+
+        // Which numbers wear what — N.Y.C. wears two, split across the cast.
+        db.CostumeNumbers.AddRange(
+            new CostumeNumber { CostumeId = cOrphan.Id, MusicalNumberId = hardKnock.Id },
+            new CostumeNumber { CostumeId = cAnnieDress.Id, MusicalNumberId = tomorrow.Id },
+            new CostumeNumber { CostumeId = cGown.Id, MusicalNumberId = nyc.Id },
+            new CostumeNumber { CostumeId = cSuit.Id, MusicalNumberId = nyc.Id });
         db.CostumeAssignments.AddRange(
-            new CostumeAssignment { MusicalNumberId = tomorrow.Id, PerformerId = kids[0].Id, Size = "CH 10", Notes = "Hem taken up 1\"" },
-            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[4].Id, Size = "CH 8" },
+            new CostumeAssignment { MusicalNumberId = tomorrow.Id, PerformerId = kids[0].Id, CostumeId = cAnnieDress.Id, Size = "CH 10", Notes = "Hem taken up 1\"", IsFitted = true },
+            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[4].Id, CostumeId = cOrphan.Id, Size = "CH 8" },
             // Liam is on stage during Hard-Knock Life but not cast in it (extra).
-            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[1].Id, Size = "CH 10", Notes = "Standing on the platform" });
+            new CostumeAssignment { MusicalNumberId = hardKnock.Id, PerformerId = kids[1].Id, CostumeId = cOrphan.Id, Size = "CH 10", Notes = "Standing on the platform" });
         await db.SaveChangesAsync();
 
         // --- A saved formation for Hard-Knock Life (history to look back on) --

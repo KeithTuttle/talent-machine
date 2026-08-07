@@ -6,7 +6,7 @@ using TalentMachine.Api.Models;
 
 namespace TalentMachine.Api.Controllers;
 
-/// <summary>Per-performer costume detail for a number (size, alteration notes).</summary>
+/// <summary>Per-performer costume detail for a number (which costume, size, notes, fitting).</summary>
 [ApiController]
 [Route("api/[controller]")]
 public class CostumeAssignmentsController : ControllerBase
@@ -44,7 +44,7 @@ public class CostumeAssignmentsController : ControllerBase
             a => a.MusicalNumberId == input.MusicalNumberId && a.PerformerId == input.PerformerId);
         if (existing is not null)
         {
-            existing.CostumePieceId = input.CostumePieceId;
+            existing.CostumeId = input.CostumeId;
             existing.Size = input.Size;
             existing.Notes = input.Notes;
             existing.IsFitted = input.IsFitted;

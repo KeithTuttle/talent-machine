@@ -31,7 +31,7 @@ import type {
   CastGroup,
   CastMembership,
   CostumeAssignment,
-  CostumePiece,
+  Costume,
   Gender,
   MusicalNumber,
   NumberCast,
@@ -59,7 +59,7 @@ const numberCasts = ref<NumberCast[]>([])
 const performers = ref<Performer[]>([])
 const sceneChars = ref<SceneCharacter[]>([])
 const numberChars = ref<NumberCharacter[]>([])
-const costumePieces = ref<CostumePiece[]>([])
+const costumeCatalog = ref<Costume[]>([])
 const costumeAssignments = ref<CostumeAssignment[]>([])
 
 const selectedNumberId = ref<number | null>(null)
@@ -121,7 +121,7 @@ async function loadAll() {
     numberCasts.value = []
     sceneChars.value = []
     numberChars.value = []
-    costumePieces.value = []
+    costumeCatalog.value = []
     costumeAssignments.value = []
     return
   }
@@ -135,7 +135,7 @@ async function loadAll() {
     performers.value,
     sceneChars.value,
     numberChars.value,
-    costumePieces.value,
+    costumeCatalog.value,
     costumeAssignments.value,
   ] = await Promise.all([
     safeGet<MusicalNumber>(`/numbers?productionId=${pid}`),
@@ -147,20 +147,20 @@ async function loadAll() {
     safeGet<Performer>('/performers'),
     safeGet<SceneCharacter>(`/scenecharacters?productionId=${pid}`),
     safeGet<NumberCharacter>(`/numbercharacters?productionId=${pid}`),
-    safeGet<CostumePiece>(`/costumepieces?productionId=${pid}`),
+    safeGet<Costume>(`/costumes?productionId=${pid}`),
     safeGet<CostumeAssignment>(`/costumeassignments?productionId=${pid}`),
   ])
   if (!numbers.value.some((n) => n.id === selectedNumberId.value))
     selectedNumberId.value = numbers.value[0]?.id ?? null
 }
 
-/** Refresh costume pieces/assignments after the number drawer edits looks, so the
- * overview's per-performer quick-change stays accurate without a full reload. */
+/** Refresh the costume catalog + assignments after the number drawer edits them,
+ * so the overview's per-performer quick-change stays accurate without a reload. */
 async function reloadCostumes() {
   const pid = scope.selectedProductionId
   if (pid === null) return
-  ;[costumePieces.value, costumeAssignments.value] = await Promise.all([
-    safeGet<CostumePiece>(`/costumepieces?productionId=${pid}`),
+  ;[costumeCatalog.value, costumeAssignments.value] = await Promise.all([
+    safeGet<Costume>(`/costumes?productionId=${pid}`),
     safeGet<CostumeAssignment>(`/costumeassignments?productionId=${pid}`),
   ])
 }
@@ -578,7 +578,7 @@ async function deleteRole(role: Role) {
           :cast="cast"
           :groups="groups"
           :number-casts="numberCasts"
-          :costume-pieces="costumePieces"
+          :costume-catalog="costumeCatalog"
           :costume-assignments="costumeAssignments"
           :performer-name="performerName"
           :performer-age="performerAge"
@@ -996,7 +996,9 @@ async function deleteRole(role: Role) {
       :performers="performers"
       :number-casts="numberCasts"
       :costume-labels="costumeLabels"
+      :catalog="costumeCatalog"
       @close="drawerNumber = null; reloadCostumes()"
+      @catalog-changed="reloadCostumes"
       @toggle-cast="toggleCastFor"
     />
   </div>

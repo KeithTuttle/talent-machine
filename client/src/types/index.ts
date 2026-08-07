@@ -297,32 +297,36 @@ export interface Formation {
   coordinates: string
 }
 
-export type CostumeGender = 'All' | 'Boys' | 'Girls'
-
 export type CostumeStatus = 'Needed' | 'Sourced' | 'Ready'
 export const COSTUME_STATUSES: CostumeStatus[] = ['Needed', 'Sourced', 'Ready']
 
-export interface CostumePiece {
+/** A costume in the production's catalog — reused across numbers. */
+export interface Costume {
   id: number
-  musicalNumberId: number
-  /** Short name for this look (e.g. "Bear", "Soldier"); null = unnamed. */
-  label?: string | null
-  /** Where this costume is in the gathering process. */
-  status: CostumeStatus
-  gender: CostumeGender
+  productionId: number
+  name: string
   description?: string | null
   accessories?: string | null
   shoes?: string | null
   photoUrl?: string | null
   vendorUrl?: string | null
+  status: CostumeStatus
+  notes?: string | null
+  orderIndex: number
+}
+
+/** A catalog costume worn in a number. */
+export interface CostumeNumber {
+  costumeId: number
+  musicalNumberId: number
 }
 
 export interface CostumeAssignment {
   id: number
   musicalNumberId: number
   performerId: number
-  /** Which costume piece/look this performer wears; null = unassigned. */
-  costumePieceId?: number | null
+  /** Which catalog costume this performer wears; null = unassigned. */
+  costumeId?: number | null
   size?: string | null
   notes?: string | null
   /** Has this performer been fitted in it? */

@@ -16,8 +16,9 @@ import { COSTUME_STATUSES } from '@/types'
 import type {
   CastGroup,
   CastMembership,
+  Costume,
   CostumeAssignment,
-  CostumePiece,
+  CostumeNumber,
   Gender,
   MusicalNumber,
   NumberCast,
@@ -34,11 +35,18 @@ const props = defineProps<{
   performers: Performer[]
   numberCasts: NumberCast[]
   costumeLabels: string[]
+  /** The production's costume catalog, so this number can reuse what exists. */
+  catalog: Costume[]
 }>()
-const emit = defineEmits<{ close: []; toggleCast: [numberId: number, performerId: number] }>()
+const emit = defineEmits<{
+  close: []
+  toggleCast: [numberId: number, performerId: number]
+  /** Catalog changed (entry added/edited/deleted) — parent should refetch. */
+  catalogChanged: []
+}>()
 
 const staff = useStaffStore()
-const pieces = ref<CostumePiece[]>([])
+const links = ref<CostumeNumber[]>([])
 const assignments = ref<CostumeAssignment[]>([])
 const roles = ref<Role[]>([])
 const numberChars = ref<NumberCharacter[]>([])
@@ -47,14 +55,14 @@ const tab = ref<'cast' | 'costumes' | 'formations'>('cast')
 watch(
   () => props.number?.id,
   async (id) => {
-    pieces.value = []
+    links.value = []
     assignments.value = []
     numberChars.value = []
     tab.value = 'cast'
     staff.fetch()
     if (id != null && props.number) {
-      ;[pieces.value, assignments.value, roles.value, numberChars.value] = await Promise.all([
-        api.get<CostumePiece[]>(`/costumepieces?numberId=${id}`).then((r) => r.data).catch(() => []),
+      ;[links.value, assignments.value, roles.value, numberChars.value] = await Promise.all([
+        api.get<CostumeNumber[]>(`/costumenumbers?numberId=${id}`).then((r) => r.data).catch(() => []),
         api.get<CostumeAssignment[]>(`/costumeassignments?numberId=${id}`).then((r) => r.data).catch(() => []),
         api.get<Role[]>(`/roles?productionId=${props.number.productionId}`).then((r) => r.data).catch(() => []),
         api.get<NumberCharacter[]>(`/numbercharacters?numberId=${id}`).then((r) => r.data).catch(() => []),
@@ -128,28 +136,62 @@ function useCostumeLabel(label: string) {
 }
 
 // --- Costumes ----------------------------------------------------------------
+// Costumes live in the production's catalog and are REUSED across numbers; this
+// drawer manages which of them this number wears (and who's in each). Editing a
+// costume's details here changes it everywhere it's worn.
+
+/** The catalog entries this number wears, in catalog order. */
+const pieces = computed(() =>
+  props.catalog.filter((c) => links.value.some((l) => l.costumeId === c.id)),
+)
+
+/** Catalog entries this number doesn't wear yet — the "reuse" picker. */
+const reusable = computed(() =>
+  props.catalog.filter((c) => !links.value.some((l) => l.costumeId === c.id)),
+)
 
 /** Only when a number has MORE THAN ONE costume is there a choice to make — the
  * "who's in which costume" UI stays hidden until then, so the common
  * everyone-wears-the-same-thing number stays simple. */
 const hasLooks = computed(() => pieces.value.length > 1)
 
-async function addPiece() {
+const newCostumeName = ref('')
+
+/** Put an existing catalog costume into this number. */
+async function linkCostume(costumeId: number) {
+  if (!props.number || links.value.some((l) => l.costumeId === costumeId)) return
+  links.value.push({ costumeId, musicalNumberId: props.number.id })
+  await api.post('/costumenumbers', { costumeId, musicalNumberId: props.number.id }).catch(() => {})
+}
+
+/** Create a brand-new catalog costume and put it in this number. */
+async function addCostume() {
   if (!props.number) return
-  const { data } = await api.post<CostumePiece>('/costumepieces', {
+  const name = newCostumeName.value.trim() || 'New costume'
+  const { data } = await api.post<Costume>('/costumes', {
     id: 0,
-    musicalNumberId: props.number.id,
-    gender: 'All',
+    productionId: props.number.productionId,
+    name,
     status: 'Needed',
+    orderIndex: 0,
   })
-  pieces.value.push(data)
+  newCostumeName.value = ''
+  emit('catalogChanged')
+  await linkCostume(data.id)
 }
-async function savePiece(piece: CostumePiece) {
-  await api.put(`/costumepieces/${piece.id}`, piece).catch(() => {})
+
+async function saveCostume(costume: Costume) {
+  await api.put(`/costumes/${costume.id}`, costume).catch(() => {})
+  emit('catalogChanged')
 }
-async function deletePiece(piece: CostumePiece) {
-  await api.delete(`/costumepieces/${piece.id}`)
-  pieces.value = pieces.value.filter((p) => p.id !== piece.id)
+
+/** Take a costume OUT of this number — it stays in the catalog for other numbers. */
+async function unlinkCostume(costume: Costume) {
+  if (!props.number) return
+  const numberId = props.number.id
+  links.value = links.value.filter((l) => l.costumeId !== costume.id)
+  for (const a of assignments.value) if (a.costumeId === costume.id) a.costumeId = null
+  await api.delete(`/costumenumbers?costumeId=${costume.id}&numberId=${numberId}`).catch(() => {})
 }
 
 // --- Per-kid costume detail --------------------------------------------------
@@ -177,7 +219,7 @@ async function saveAssignment(performerId: number, patch: Partial<CostumeAssignm
   if (!a) {
     a = {
       id: 0, musicalNumberId: props.number.id, performerId,
-      costumePieceId: null, size: null, notes: null, isFitted: false,
+      costumeId: null, size: null, notes: null, isFitted: false,
     }
     assignments.value.push(a)
   }
@@ -186,7 +228,7 @@ async function saveAssignment(performerId: number, patch: Partial<CostumeAssignm
     id: a.id,
     musicalNumberId: props.number.id,
     performerId,
-    costumePieceId: a.costumePieceId ?? null,
+    costumeId: a.costumeId ?? null,
     size: a.size ?? null,
     notes: a.notes ?? null,
     isFitted: a.isFitted ?? false,
@@ -199,11 +241,11 @@ async function saveAssignment(performerId: number, patch: Partial<CostumeAssignm
 // kid-first, because that's how a director thinks about a mixed number.
 
 const wearersOfPiece = (pieceId: number) =>
-  wearers.value.filter((pid) => assignmentOf(pid)?.costumePieceId === pieceId)
+  wearers.value.filter((pid) => assignmentOf(pid)?.costumeId === pieceId)
 
 /** Kids in the number who aren't in any costume yet (only meaningful with 2+). */
 const unassignedWearers = computed(() =>
-  wearers.value.filter((pid) => assignmentOf(pid)?.costumePieceId == null),
+  wearers.value.filter((pid) => assignmentOf(pid)?.costumeId == null),
 )
 
 const performerGender = (id: number) =>
@@ -213,8 +255,8 @@ const performerGender = (id: number) =>
 /** Put everyone in this number of one gender into a costume — the usual split. */
 async function assignAllByGender(pieceId: number, gender: Gender) {
   for (const pid of wearers.value) {
-    if (performerGender(pid) === gender && assignmentOf(pid)?.costumePieceId !== pieceId)
-      await saveAssignment(pid, { costumePieceId: pieceId })
+    if (performerGender(pid) === gender && assignmentOf(pid)?.costumeId !== pieceId)
+      await saveAssignment(pid, { costumeId: pieceId })
   }
 }
 
@@ -222,7 +264,7 @@ async function addWearer(pieceId: number, e: Event) {
   const select = e.target as HTMLSelectElement
   const pid = Number(select.value)
   select.value = ''
-  if (pid) await saveAssignment(pid, { costumePieceId: pieceId })
+  if (pid) await saveAssignment(pid, { costumeId: pieceId })
 }
 
 async function addExtra(e: Event) {
@@ -347,30 +389,25 @@ const castPerformers = computed(() =>
 
           <!-- What they wear -->
           <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What they wear</span>
-              <button class="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs hover:bg-accent" @click="addPiece">
-                <Plus class="h-3.5 w-3.5" /> {{ pieces.length === 0 ? 'Add a costume' : 'Add another costume' }}
-              </button>
-            </div>
+            <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What they wear</span>
             <p v-if="pieces.length === 0" class="rounded-md border border-dashed border-border p-3 text-center text-xs leading-relaxed text-muted-foreground">
-              Describe what this number wears. Add a second costume only if different kids wear
+              Add what this number wears. Add a second costume only if different kids wear
               different things (e.g. some bears, some soldiers).
             </p>
             <div v-for="p in pieces" :key="p.id" class="space-y-1.5 rounded-md border border-border p-2.5">
               <div class="flex items-center gap-2">
-                <input v-model="p.label" placeholder="Costume name (e.g. Bear)" class="w-32 shrink-0 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium focus:outline-none" @change="savePiece(p)" />
-                <select v-model="p.status" class="shrink-0 rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none" title="Do we have this costume yet?" @change="savePiece(p)">
+                <input v-model="p.name" placeholder="Costume name (e.g. Bear)" class="w-32 shrink-0 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium focus:outline-none" @change="saveCostume(p)" />
+                <select v-model="p.status" class="shrink-0 rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none" title="Do we have this costume yet?" @change="saveCostume(p)">
                   <option v-for="s in COSTUME_STATUSES" :key="s" :value="s">{{ s }}</option>
                 </select>
-                <input v-model="p.description" placeholder="Description" class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none" @change="savePiece(p)" />
-                <button class="rounded p-1 text-muted-foreground hover:text-destructive" title="Delete this costume" @click="deletePiece(p)"><Trash2 class="h-3.5 w-3.5" /></button>
+                <input v-model="p.description" placeholder="Description" class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none" @change="saveCostume(p)" />
+                <button class="rounded p-1 text-muted-foreground hover:text-destructive" title="Take this costume out of this number (it stays in the show's costume list)" @click="unlinkCostume(p)"><X class="h-3.5 w-3.5" /></button>
               </div>
               <div class="grid grid-cols-2 gap-1.5">
-                <input v-model="p.accessories" placeholder="Accessories" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="savePiece(p)" />
-                <input v-model="p.shoes" placeholder="Shoes" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="savePiece(p)" />
-                <input v-model="p.photoUrl" placeholder="Photo URL" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="savePiece(p)" />
-                <input v-model="p.vendorUrl" placeholder="Vendor URL" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="savePiece(p)" />
+                <input v-model="p.accessories" placeholder="Accessories" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveCostume(p)" />
+                <input v-model="p.shoes" placeholder="Shoes" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveCostume(p)" />
+                <input v-model="p.photoUrl" placeholder="Photo URL" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveCostume(p)" />
+                <input v-model="p.vendorUrl" placeholder="Vendor URL" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveCostume(p)" />
               </div>
 
               <!-- Who's in this costume — only once there's more than one to choose from -->
@@ -380,7 +417,7 @@ const castPerformers = computed(() =>
                   <span v-if="wearersOfPiece(p.id).length === 0" class="text-xs italic text-muted-foreground">nobody yet</span>
                   <span v-for="pid in wearersOfPiece(p.id)" :key="pid" class="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
                     {{ performerName(pid) }}
-                    <button class="hover:text-destructive" :aria-label="`Take ${performerName(pid)} out of this costume`" @click="saveAssignment(pid, { costumePieceId: null })">
+                    <button class="hover:text-destructive" :aria-label="`Take ${performerName(pid)} out of this costume`" @click="saveAssignment(pid, { costumeId: null })">
                       <X class="h-3 w-3" />
                     </button>
                   </span>
@@ -388,7 +425,7 @@ const castPerformers = computed(() =>
                 <div class="flex flex-wrap items-center gap-1.5">
                   <select :value="''" class="rounded-md border border-dashed border-border bg-transparent px-2 py-1 text-xs text-muted-foreground focus:outline-none" @change="addWearer(p.id, $event)">
                     <option value="">+ add kids…</option>
-                    <option v-for="pid in wearers.filter((w) => assignmentOf(w)?.costumePieceId !== p.id)" :key="pid" :value="pid">
+                    <option v-for="pid in wearers.filter((w) => assignmentOf(w)?.costumeId !== p.id)" :key="pid" :value="pid">
                       {{ performerName(pid) }}
                     </option>
                   </select>
@@ -401,6 +438,33 @@ const castPerformers = computed(() =>
               <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>Not in a costume yet: {{ unassignedWearers.map(performerName).join(', ') }}</span>
             </p>
+
+            <!-- Add a costume: reuse one already in the show, or make a new one -->
+            <div class="space-y-1.5 rounded-md border border-dashed border-border p-2.5">
+              <form class="flex gap-2" @submit.prevent="addCostume">
+                <input
+                  v-model="newCostumeName"
+                  placeholder="New costume (e.g. Bear)"
+                  class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <button type="submit" class="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent">
+                  <Plus class="h-3.5 w-3.5" /> Add
+                </button>
+              </form>
+              <select
+                v-if="reusable.length > 0"
+                :value="''"
+                class="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground focus:outline-none"
+                title="Costumes already used elsewhere in this show"
+                @change="linkCostume(Number(($event.target as HTMLSelectElement).value))"
+              >
+                <option value="">or reuse one from this show…</option>
+                <option v-for="c in reusable" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
+              <p class="text-[11px] leading-snug text-muted-foreground">
+                Costumes are shared across the show — editing one here updates it everywhere it's worn.
+              </p>
+            </div>
           </div>
 
           <!-- Per-kid sizes -->

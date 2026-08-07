@@ -1,9 +1,9 @@
 namespace TalentMachine.Api.Models;
 
 /// <summary>
-/// A performer's costume detail for a number: which look they wear (
-/// <see cref="CostumePieceId"/>), their size and any alteration notes. A
-/// performer WITHOUT a NumberCast row for the same number is an "on-stage extra"
+/// A performer's costume detail for a number: which catalog <see cref="Costume"/>
+/// they wear, their size, any alteration notes, and whether they've been fitted.
+/// A performer WITHOUT a NumberCast row for the same number is an "on-stage extra"
 /// (on stage during the number but not performing it) — the backstage sheet still
 /// needs their costume. Surrogate key; unique per (number, performer).
 /// </summary>
@@ -13,8 +13,8 @@ public class CostumeAssignment : ITenantScoped
     public int Id { get; set; }
     public int MusicalNumberId { get; set; }
     public int PerformerId { get; set; }
-    /// <summary>Which costume piece/look this performer wears; null = unassigned.</summary>
-    public int? CostumePieceId { get; set; }
+    /// <summary>Which catalog costume this performer wears; null = unassigned.</summary>
+    public int? CostumeId { get; set; }
     public string? Size { get; set; }
     public string? Notes { get; set; }
     /// <summary>Has this performer been fitted in it? Drives the "who still needs a fitting" rollup.</summary>
@@ -22,5 +22,5 @@ public class CostumeAssignment : ITenantScoped
 
     public MusicalNumber? MusicalNumber { get; set; }
     public Performer? Performer { get; set; }
-    public CostumePiece? CostumePiece { get; set; }
+    public Costume? Costume { get; set; }
 }

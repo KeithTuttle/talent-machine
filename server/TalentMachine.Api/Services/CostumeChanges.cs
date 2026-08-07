@@ -37,41 +37,57 @@ public static class CostumeChanges
         return ordered;
     }
 
-    /// <summary>Display name for a costume: its look name, else its description.</summary>
-    public static string LookName(CostumePiece p) =>
-        !string.IsNullOrWhiteSpace(p.Label) ? p.Label!.Trim()
-        : !string.IsNullOrWhiteSpace(p.Description) ? p.Description!.Trim()
-        : p.Gender != CostumeGender.All ? p.Gender.ToString()
+    /// <summary>Display name for a costume.</summary>
+    public static string LookName(Costume c) =>
+        !string.IsNullOrWhiteSpace(c.Name) ? c.Name.Trim()
+        : !string.IsNullOrWhiteSpace(c.Description) ? c.Description!.Trim()
         : "Costume";
 
     /// <summary>
-    /// What a performer wears in a number: the look they're assigned, else the
-    /// number's costume label. Empty = unknown, which never counts as a change.
+    /// What a performer wears in a number. An assigned catalog costume compares by
+    /// its ID ("c:12") so two numbers wearing the same costume always match — no
+    /// spelling to get wrong. Falls back to the number's costume label text for
+    /// numbers with nothing assigned. Empty = unknown, which never counts as a change.
     /// </summary>
     public static string Identity(
         MusicalNumber number, int performerId,
         Dictionary<(int, int), CostumeAssignment> assignments,
-        Dictionary<int, CostumePiece> pieces)
+        Dictionary<int, Costume> costumes)
     {
         if (assignments.TryGetValue((number.Id, performerId), out var a)
-            && a.CostumePieceId is int pieceId
-            && pieces.TryGetValue(pieceId, out var piece))
+            && a.CostumeId is int costumeId
+            && costumes.ContainsKey(costumeId))
         {
-            var look = !string.IsNullOrWhiteSpace(piece.Label) ? piece.Label : piece.Description;
-            if (!string.IsNullOrWhiteSpace(look)) return look!.Trim();
+            return $"c:{costumeId}";
+        }
+        var label = number.CostumeLabel?.Trim();
+        return string.IsNullOrEmpty(label) ? string.Empty : $"l:{label}";
+    }
+
+    /// <summary>Human-readable costume for a performer in a number (for the sheets).</summary>
+    public static string DisplayCostume(
+        MusicalNumber number, int performerId,
+        Dictionary<(int, int), CostumeAssignment> assignments,
+        Dictionary<int, Costume> costumes)
+    {
+        if (assignments.TryGetValue((number.Id, performerId), out var a)
+            && a.CostumeId is int costumeId
+            && costumes.TryGetValue(costumeId, out var costume))
+        {
+            return LookName(costume);
         }
         return number.CostumeLabel?.Trim() ?? string.Empty;
     }
 
     public static List<CostumeChange> Detect(
         List<Act> acts, List<MusicalNumber> numbers, List<NumberCast> casts,
-        List<CostumeAssignment> assignments, List<CostumePiece> pieces)
+        List<CostumeAssignment> assignments, List<Costume> costumeCatalog)
     {
         var ordered = RunningOrder(acts, numbers);
         var position = new Dictionary<int, int>();
         for (var i = 0; i < ordered.Count; i++) position[ordered[i].Id] = i;
 
-        var pieceById = pieces.GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First());
+        var costumeById = costumeCatalog.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
         var assignmentByKey = assignments
             .GroupBy(a => (a.MusicalNumberId, a.PerformerId))
             .ToDictionary(g => g.Key, g => g.First());
@@ -93,13 +109,16 @@ public static class CostumeChanges
                 // An act break sits between them → intermission, never a rush.
                 if (from.ActId is not null && to.ActId is not null && from.ActId != to.ActId) continue;
 
-                var a = Identity(from, group.Key, assignmentByKey, pieceById);
-                var b = Identity(to, group.Key, assignmentByKey, pieceById);
+                var a = Identity(from, group.Key, assignmentByKey, costumeById);
+                var b = Identity(to, group.Key, assignmentByKey, costumeById);
                 if (a.Length == 0 || b.Length == 0) continue;
                 if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) continue;
 
                 changes.Add(new CostumeChange(
-                    group.Key, from, to, a, b, position[to.Id] - position[from.Id] - 1));
+                    group.Key, from, to,
+                    DisplayCostume(from, group.Key, assignmentByKey, costumeById),
+                    DisplayCostume(to, group.Key, assignmentByKey, costumeById),
+                    position[to.Id] - position[from.Id] - 1));
             }
         }
 
