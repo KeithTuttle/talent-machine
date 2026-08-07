@@ -390,6 +390,14 @@ const castPerformers = computed(() =>
                 <input v-model="p.vendorUrl" placeholder="Vendor URL" class="rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none" @change="saveCostume(p)" />
               </div>
 
+              <!-- With one costume there's nothing to choose, but say so — silence
+                   reads as "I haven't told it who wears this". -->
+              <p v-if="!hasLooks" class="border-t border-border pt-1.5 text-[11px] text-muted-foreground">
+                Everyone in this number wears this ({{ wearers.length }}
+                {{ wearers.length === 1 ? 'kid' : 'kids' }}). Add a second costume if some
+                of them wear something different.
+              </p>
+
               <!-- Who's in this costume — only once there's more than one to choose from -->
               <div v-if="hasLooks" class="space-y-1.5 border-t border-border pt-1.5">
                 <div class="flex flex-wrap items-center gap-1">

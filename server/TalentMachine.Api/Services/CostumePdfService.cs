@@ -133,10 +133,9 @@ public class CostumePdfService
                 col.Item().PaddingTop(6).Text("Who wears it").FontSize(9).SemiBold().FontColor(Colors.Grey.Darken2);
 
                 string Named(int id) => performerName.GetValueOrDefault(id, $"#{id}");
-                var looksUsed = costumes.Count > 0
-                    && wearerIds.Any(id => byPerformer.TryGetValue(id, out var a) && a.CostumeId is not null);
-
-                if (looksUsed)
+                // Split the wearers by costume only when there's more than one to
+                // split between; a single-costume number is just a flat list.
+                if (costumes.Count > 1)
                 {
                     foreach (var costume in costumes)
                     {
@@ -145,7 +144,7 @@ public class CostumePdfService
                             .OrderBy(Named).ToList();
                         if (ids.Count == 0) continue;
                         col.Item().PaddingTop(3).Text(LookName(costume)).FontSize(9).SemiBold().FontColor(Colors.Grey.Darken3);
-                        foreach (var id in ids) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named));
+                        foreach (var id in ids) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named, true));
                     }
                     var noLook = wearerIds
                         .Where(id => !byPerformer.TryGetValue(id, out var a) || a.CostumeId is null)
@@ -153,13 +152,14 @@ public class CostumePdfService
                     if (noLook.Count > 0)
                     {
                         col.Item().PaddingTop(3).Text("No costume assigned").FontSize(9).SemiBold().FontColor(Colors.Grey.Medium);
-                        foreach (var id in noLook) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named));
+                        foreach (var id in noLook) col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named, false));
                     }
                 }
                 else
                 {
+                    // One costume dresses everyone here, so they all need fitting in it.
                     foreach (var id in wearerIds.OrderBy(Named))
-                        col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named));
+                        col.Item().Element(c => ComposeWearer(c, id, cast, byPerformer, Named, costumes.Count == 1));
                 }
             }
         });
@@ -169,7 +169,8 @@ public class CostumePdfService
 
     private void ComposeWearer(
         IContainer container, int id, HashSet<int> cast,
-        Dictionary<int, CostumeAssignment> byPerformer, Func<int, string> named)
+        Dictionary<int, CostumeAssignment> byPerformer, Func<int, string> named,
+        bool wearsACostume)
     {
         var extra = !cast.Contains(id);
         byPerformer.TryGetValue(id, out var a);
@@ -179,7 +180,7 @@ public class CostumePdfService
             if (extra) t.Span("  (on stage, not in number)").FontSize(8).FontColor(Colors.Orange.Darken2);
             if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  — size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
             if (!string.IsNullOrWhiteSpace(a?.Notes)) t.Span($"  ({a!.Notes})").FontSize(9).Italic().FontColor(Colors.Grey.Medium);
-            if (a is { CostumeId: not null, IsFitted: false })
+            if (wearsACostume && a?.IsFitted != true)
                 t.Span("  needs fitting").FontSize(8).Italic().FontColor(Colors.Red.Medium);
         });
     }

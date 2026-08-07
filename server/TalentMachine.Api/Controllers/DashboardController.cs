@@ -137,22 +137,47 @@ public class DashboardController : ControllerBase
                 .OrderBy(p => p.Percent).ThenBy(p => p.Name).ToList());
 
         // --- Costume readiness ---
-        // Fittings only count for kids actually put in a costume; an unassigned kid
-        // isn't "unfitted", there's just nothing to fit them in yet.
         var catalog = await _db.Costumes.Where(c => c.ProductionId == productionId).ToListAsync();
         var costumeAssignments = await _db.CostumeAssignments
             .Where(a => numberIds.Contains(a.MusicalNumberId)).ToListAsync();
         var acts = await _db.Acts.Where(a => a.ProductionId == productionId).ToListAsync();
         var costumeNumbers = await _db.CostumeNumbers
             .Where(cn => numberIds.Contains(cn.MusicalNumberId)).ToListAsync();
-        var fittable = costumeAssignments.Where(a => a.CostumeId != null).ToList();
+
+        // Who needs a fitting: everyone the app can say is wearing a costume. That's
+        // an explicit assignment OR — in a number with exactly one costume — simply
+        // being in the number, since one costume dresses everyone (which is why the
+        // per-kid picker stays hidden there). Counting only explicit assignments made
+        // fittings in single-costume numbers invisible.
+        var costumeById = catalog.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
+        var assignmentByKey = costumeAssignments
+            .GroupBy(a => (a.MusicalNumberId, a.PerformerId))
+            .ToDictionary(g => g.Key, g => g.First());
+        var wornByNumber = costumeNumbers.ToLookup(cn => cn.MusicalNumberId, cn => cn.CostumeId);
+
+        var fittingsTotal = 0;
+        var fittingsDone = 0;
+        foreach (var n in numbers)
+        {
+            var people = casts.Where(c => c.MusicalNumberId == n.Id).Select(c => c.PerformerId)
+                .Concat(costumeAssignments.Where(a => a.MusicalNumberId == n.Id).Select(a => a.PerformerId))
+                .Distinct();
+            foreach (var pid in people)
+            {
+                if (Services.CostumeChanges.CostumeIdFor(n, pid, assignmentByKey, costumeById, wornByNumber) is null)
+                    continue;
+                fittingsTotal++;
+                if (assignmentByKey.TryGetValue((n.Id, pid), out var a) && a.IsFitted) fittingsDone++;
+            }
+        }
+
         var costumes = new CostumesDto(
             Total: catalog.Count,
             Ready: catalog.Count(c => c.Status == CostumeStatus.Ready),
             Sourced: catalog.Count(c => c.Status == CostumeStatus.Sourced),
             Needed: catalog.Count(c => c.Status == CostumeStatus.Needed),
-            FittingsDone: fittable.Count(a => a.IsFitted),
-            FittingsTotal: fittable.Count,
+            FittingsDone: fittingsDone,
+            FittingsTotal: fittingsTotal,
             // Count MOMENTS (a spot in the show needing a dresser), not per-kid
             // changes, so this matches the overview panel's grouped rows.
             QuickChanges: Services.CostumeChanges

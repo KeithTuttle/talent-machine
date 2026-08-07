@@ -140,7 +140,7 @@ public class CostumePlotPdfService
                         .SemiBold().FontColor(string.IsNullOrWhiteSpace(costume) ? Colors.Grey.Medium : Colors.Black);
                     if (!string.IsNullOrWhiteSpace(a?.Size)) t.Span($"  size {a!.Size}").FontSize(9).FontColor(Colors.Grey.Darken1);
                     if (changed) t.Span("   ← CHANGE").FontSize(8).SemiBold().FontColor(Colors.Orange.Darken2);
-                    if (a is { CostumeId: not null, IsFitted: false })
+                    if (!string.IsNullOrWhiteSpace(costume) && a?.IsFitted != true)
                         t.Span("   needs fitting").FontSize(8).Italic().FontColor(Colors.Red.Medium);
                 });
 
