@@ -1,0 +1,33 @@
+name: Supabase keep-alive
+
+# Supabase's free tier pauses a project after 7 days with no activity. This opens
+# a connection and runs a trivial query twice a week, which resets that timer, so
+# the database never idles out. Also runnable on demand from the Actions tab.
+
+on:
+  schedule:
+    # Mondays & Thursdays at 07:23 UTC. Twice a week is well inside the 7-day
+    # window, so even a skipped/delayed run (GitHub can defer cron under load)
+    # is harmless. Odd minute avoids the top-of-hour rush when runs get delayed.
+    - cron: '23 7 * * 1,4'
+  workflow_dispatch: {}
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set — see .github/workflows/keepalive.yml"
+            exit 1
+          fi
+          # psql ships preinstalled on ubuntu-latest. A read is enough to count
+          # as activity; -tAc keeps the output to a single line.
+          psql "$SUPABASE_DB_URL" -tAc 'select now();'
