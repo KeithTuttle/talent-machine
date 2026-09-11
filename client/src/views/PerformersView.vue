@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, Plus, Trash2, Upload, X } from 'lucide-vue-n
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
-import { ageOn } from '@/lib/age'
+import { effectiveAge, isApproximateAge } from '@/lib/age'
 import CastImportDialog from '@/components/CastImportDialog.vue'
 import type { Gender, Guardian, Performer, PerformerGuardian } from '@/types'
 
@@ -39,6 +39,7 @@ const form = ref({
   lastName: '',
   gender: '' as Gender | '',
   dateOfBirth: '',
+  ageYears: '',
   notes: '',
   guardianName: '',
   guardianEmail: '',
@@ -47,7 +48,7 @@ const form = ref({
 
 function resetForm() {
   form.value = {
-    firstName: '', lastName: '', gender: '', dateOfBirth: '', notes: '',
+    firstName: '', lastName: '', gender: '', dateOfBirth: '', ageYears: '', notes: '',
     guardianName: '', guardianEmail: '', guardianPhone: '',
   }
 }
@@ -61,6 +62,8 @@ async function addPerformer() {
     lastName: f.lastName.trim(),
     gender: f.gender || null,
     dateOfBirth: f.dateOfBirth || null,
+    // Only meaningful without a DOB — see lib/age.ts.
+    ageYears: f.dateOfBirth ? null : (f.ageYears ? Number(f.ageYears) : null),
     notes: f.notes.trim() || null,
     isActive: true,
     createdAt: new Date().toISOString(),
@@ -113,6 +116,11 @@ async function saveNotes(performer: Performer, e: Event) {
 }
 async function setDateOfBirth(performer: Performer, e: Event) {
   performer.dateOfBirth = (e.target as HTMLInputElement).value || null
+  await savePerformer(performer)
+}
+async function setAgeYears(performer: Performer, e: Event) {
+  const raw = (e.target as HTMLInputElement).value
+  performer.ageYears = raw ? Number(raw) : null
   await savePerformer(performer)
 }
 async function setGender(performer: Performer, e: Event) {
@@ -226,6 +234,10 @@ async function unlinkGuardian(performerId: number, guardianId: number) {
           <span class="text-xs font-medium text-muted-foreground">Date of birth</span>
           <input v-model="form.dateOfBirth" type="date" class="block rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
         </label>
+        <label v-if="!form.dateOfBirth" class="space-y-1">
+          <span class="text-xs font-medium text-muted-foreground" title="Used only when the date of birth isn't known — won't update on its own.">Age (if DOB unknown)</span>
+          <input v-model="form.ageYears" type="number" min="0" max="120" placeholder="e.g. 8" class="block w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+        </label>
         <label class="space-y-1">
           <span class="text-xs font-medium text-muted-foreground">Gender</span>
           <select v-model="form.gender" class="block w-20 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring">
@@ -263,7 +275,7 @@ async function unlinkGuardian(performerId: number, guardianId: number) {
             <ChevronRight v-else class="h-4 w-4 shrink-0 text-muted-foreground" />
             <span class="font-medium">{{ performer.firstName }} {{ performer.lastName }}</span>
             <span v-if="genderLabel(performer.gender)" class="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{{ genderLabel(performer.gender) }}</span>
-            <span v-if="ageOn(performer.dateOfBirth) !== null" class="text-xs text-muted-foreground">{{ ageOn(performer.dateOfBirth) }} yrs</span>
+            <span v-if="effectiveAge(performer) !== null" class="text-xs text-muted-foreground">{{ isApproximateAge(performer) ? '~' : '' }}{{ effectiveAge(performer) }} yrs</span>
             <span v-if="guardiansOf(performer.id).length > 0" class="text-xs text-muted-foreground">· {{ guardiansOf(performer.id).length }} guardian{{ guardiansOf(performer.id).length === 1 ? '' : 's' }}</span>
           </button>
           <button
@@ -282,6 +294,10 @@ async function unlinkGuardian(performerId: number, guardianId: number) {
             <label class="space-y-1">
               <span class="text-xs font-medium text-muted-foreground">Date of birth</span>
               <input type="date" class="block rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring" :value="performer.dateOfBirth ?? ''" @change="setDateOfBirth(performer, $event)" />
+            </label>
+            <label v-if="!performer.dateOfBirth" class="space-y-1">
+              <span class="text-xs font-medium text-muted-foreground" title="Used only when the date of birth isn't known — won't update on its own.">Age (if DOB unknown)</span>
+              <input type="number" min="0" max="120" placeholder="e.g. 8" class="block w-24 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring" :value="performer.ageYears ?? ''" @change="setAgeYears(performer, $event)" />
             </label>
             <label class="space-y-1">
               <span class="text-xs font-medium text-muted-foreground">Gender</span>

@@ -14,7 +14,7 @@ import {
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { confirm } from '@/lib/confirm'
-import { ageOn } from '@/lib/age'
+import { effectiveAge, isApproximateAge } from '@/lib/age'
 import { tint } from '@/lib/colors'
 import ColorDot from '@/components/ColorDot.vue'
 import ColorPicker from '@/components/ColorPicker.vue'
@@ -220,13 +220,15 @@ const performerName = (id: number) => {
   return p ? `${p.firstName} ${p.lastName}`.trim() : `#${id}`
 }
 
-/** Age as of the production's show date (fallback: today); null when DoB unknown. */
-const performerAge = (id: number) => {
-  const p =
-    cast.value.find((m) => m.performerId === id)?.performer ??
-    performers.value.find((x) => x.id === id)
-  return ageOn(p?.dateOfBirth, scope.selectedProduction?.openingDate)
-}
+const performerOf = (id: number) =>
+  cast.value.find((m) => m.performerId === id)?.performer ??
+  performers.value.find((x) => x.id === id)
+
+/** Age as of the production's show date (fallback: today); null when unknown. */
+const performerAge = (id: number) =>
+  effectiveAge(performerOf(id), scope.selectedProduction?.openingDate)
+/** True when that age is a typed-in guess rather than computed from a DOB. */
+const performerAgeApprox = (id: number) => isApproximateAge(performerOf(id))
 
 const castGroupOf = (m: CastMembership) => groups.value.find((g) => g.id === m.castGroupId) ?? null
 
@@ -700,7 +702,7 @@ async function deleteRole(role: Role) {
                   @mousedown.prevent="pickExistingToCast(p)"
                 >
                   <span class="truncate">{{ p.firstName }} {{ p.lastName }}</span>
-                  <span v-if="performerAge(p.id) !== null" class="shrink-0 text-xs text-muted-foreground">{{ performerAge(p.id) }}</span>
+                  <span v-if="performerAge(p.id) !== null" class="shrink-0 text-xs text-muted-foreground">{{ performerAgeApprox(p.id) ? '~' : '' }}{{ performerAge(p.id) }}</span>
                 </button>
               </div>
               <div v-if="castPickerOpen" class="fixed inset-0 z-10" @mousedown="castPickerOpen = false" />
@@ -744,7 +746,7 @@ async function deleteRole(role: Role) {
                 >
                   <span class="truncate">{{ performerName(m.performerId) }}</span>
                   <span v-if="performerAge(m.performerId) !== null" class="text-xs text-muted-foreground">
-                    {{ performerAge(m.performerId) }}
+                    {{ performerAgeApprox(m.performerId) ? '~' : '' }}{{ performerAge(m.performerId) }}
                   </span>
                   <FileText v-if="hasNotes(m)" class="h-3 w-3 shrink-0 text-muted-foreground" />
                 </button>
@@ -964,7 +966,7 @@ async function deleteRole(role: Role) {
                   <span class="truncate">
                     {{ performerName(m.performerId) }}
                     <span v-if="performerAge(m.performerId) !== null" class="text-xs text-muted-foreground">
-                      · {{ performerAge(m.performerId) }}
+                      · {{ performerAgeApprox(m.performerId) ? '~' : '' }}{{ performerAge(m.performerId) }}
                     </span>
                     <span v-if="characterOf(selectedNumber.id, m.performerId)" class="text-xs font-medium text-primary">
                       — {{ characterOf(selectedNumber.id, m.performerId) }}

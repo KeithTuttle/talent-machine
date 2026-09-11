@@ -4,7 +4,7 @@ import { RouterLink } from 'vue-router'
 import { CalendarOff, Contact, X } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { toast } from '@/lib/toast'
-import { ageOn } from '@/lib/age'
+import { effectiveAge, isApproximateAge } from '@/lib/age'
 import { conflictLabel } from '@/lib/conflicts'
 import ColorDot from '@/components/ColorDot.vue'
 import type { CastGroup, CastMembership, Conflict, Guardian, PerformerGuardian } from '@/types'
@@ -48,7 +48,8 @@ watch(
   { immediate: true },
 )
 
-const age = computed(() => ageOn(props.member?.performer?.dateOfBirth, props.openingDate))
+const age = computed(() => effectiveAge(props.member?.performer, props.openingDate))
+const ageApprox = computed(() => isApproximateAge(props.member?.performer))
 
 const genderLabel = computed(() => {
   const g = props.member?.performer?.gender
@@ -84,7 +85,7 @@ async function saveShowNotes() {
             {{ member.performer?.firstName }} {{ member.performer?.lastName }}
           </h2>
           <p class="mt-0.5 text-sm text-muted-foreground">
-            <span v-if="age !== null">{{ age }} yrs</span>
+            <span v-if="age !== null">{{ ageApprox ? '~' : '' }}{{ age }} yrs</span>
             <span v-if="age !== null && genderLabel"> · </span>
             <span v-if="genderLabel">{{ genderLabel }}</span>
           </p>

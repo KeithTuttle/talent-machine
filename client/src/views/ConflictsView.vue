@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { CalendarOff, ChevronLeft, ChevronRight, Plus, Trash2, Upload } from 'lucide-vue-next'
 import { api } from '@/lib/api'
 import { confirm } from '@/lib/confirm'
-import { ageOn } from '@/lib/age'
+import { effectiveAge, isApproximateAge } from '@/lib/age'
 import { tint } from '@/lib/colors'
 import { WEEKDAYS, conflictLabel, occursOn, toIsoDate, parseDate } from '@/lib/conflicts'
 import ColorDot from '@/components/ColorDot.vue'
@@ -349,8 +349,8 @@ const openingDate = computed(() => scope.selectedProduction?.openingDate)
             <ColorDot :color="groupColor(m.performerId)" size="sm" />
             <span class="flex-1 text-sm font-medium">
               {{ performerName(m.performerId) }}
-              <span v-if="ageOn(m.performer?.dateOfBirth, openingDate) !== null" class="ml-1 text-xs font-normal text-muted-foreground">
-                {{ ageOn(m.performer?.dateOfBirth, openingDate) }}
+              <span v-if="effectiveAge(m.performer, openingDate) !== null" class="ml-1 text-xs font-normal text-muted-foreground">
+                {{ isApproximateAge(m.performer) ? '~' : '' }}{{ effectiveAge(m.performer, openingDate) }}
               </span>
             </span>
             <span class="text-xs text-muted-foreground">

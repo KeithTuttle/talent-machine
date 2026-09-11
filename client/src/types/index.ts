@@ -28,6 +28,8 @@ export interface Performer {
   gender?: Gender | null
   /** yyyy-MM-dd; optional — when set the UI computes ages. */
   dateOfBirth?: string | null
+  /** A typed-in age, used only when dateOfBirth is unknown — see lib/age.ts. */
+  ageYears?: number | null
   notes?: string | null
   isActive: boolean
   createdAt: string
