@@ -1,14 +1,16 @@
 name: Supabase keep-alive
 
 # Supabase's free tier pauses a project after 7 days with no activity. This opens
-# a connection and reads from a real table twice a week, which resets that timer,
+# a connection and WRITES a heartbeat row twice a week, which resets that timer,
 # so the database never idles out. Also runnable on demand from the Actions tab.
 #
 # GOTCHA (found 2026-09-17): the first version of this ran `select now();` — a
 # pure function call that touches no table. The workflow ran successfully every
 # time, but Supabase kept sending pause warnings anyway: its inactivity check
-# looks at real table activity (reads/writes against user data), not just "a
-# connection happened". A query against an actual table is what counts.
+# looks at real table activity, not just "a connection happened". A read from a
+# real table (Performers) was tried next and hasn't been proven to fail, but
+# rather than trust another guess at undocumented criteria, this now does a
+# genuine WRITE — the least ambiguous "this database is alive" signal there is.
 
 on:
   schedule:
@@ -26,7 +28,7 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Query the database
+      - name: Write a heartbeat row
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
@@ -34,7 +36,12 @@ jobs:
             echo "::error::SUPABASE_DB_URL secret is not set — see .github/workflows/keepalive.yml"
             exit 1
           fi
-          # psql ships preinstalled on ubuntu-latest. Read a real table (not a
-          # bare `select now()` — see the gotcha above) so it registers as
-          # genuine activity; -tAc keeps the output to a single line.
-          psql "$SUPABASE_DB_URL" -tAc 'select count(*) from "Performers";'
+          # psql ships preinstalled on ubuntu-latest. A single-row upsert into a
+          # dedicated table: a real WRITE every run, no growth, idempotent, and
+          # entirely separate from the app's own schema/migrations — this table
+          # isn't an EF entity, it's pure ops plumbing the app never sees.
+          psql "$SUPABASE_DB_URL" \
+            -c 'CREATE TABLE IF NOT EXISTS "_KeepAlive" (id int PRIMARY KEY, pinged_at timestamptz NOT NULL);' \
+            -tAc 'INSERT INTO "_KeepAlive" (id, pinged_at) VALUES (1, now())
+                  ON CONFLICT (id) DO UPDATE SET pinged_at = excluded.pinged_at
+                  RETURNING pinged_at;'
