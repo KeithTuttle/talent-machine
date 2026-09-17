@@ -1,8 +1,14 @@
 name: Supabase keep-alive
 
 # Supabase's free tier pauses a project after 7 days with no activity. This opens
-# a connection and runs a trivial query twice a week, which resets that timer, so
-# the database never idles out. Also runnable on demand from the Actions tab.
+# a connection and reads from a real table twice a week, which resets that timer,
+# so the database never idles out. Also runnable on demand from the Actions tab.
+#
+# GOTCHA (found 2026-09-17): the first version of this ran `select now();` — a
+# pure function call that touches no table. The workflow ran successfully every
+# time, but Supabase kept sending pause warnings anyway: its inactivity check
+# looks at real table activity (reads/writes against user data), not just "a
+# connection happened". A query against an actual table is what counts.
 
 on:
   schedule:
@@ -28,6 +34,7 @@ jobs:
             echo "::error::SUPABASE_DB_URL secret is not set — see .github/workflows/keepalive.yml"
             exit 1
           fi
-          # psql ships preinstalled on ubuntu-latest. A read is enough to count
-          # as activity; -tAc keeps the output to a single line.
-          psql "$SUPABASE_DB_URL" -tAc 'select now();'
+          # psql ships preinstalled on ubuntu-latest. Read a real table (not a
+          # bare `select now()` — see the gotcha above) so it registers as
+          # genuine activity; -tAc keeps the output to a single line.
+          psql "$SUPABASE_DB_URL" -tAc 'select count(*) from "Performers";'
