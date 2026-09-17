@@ -1,8 +1,12 @@
 name: Supabase keep-alive
 
 # Supabase's free tier pauses a project after 7 days with no activity. This opens
-# a connection and WRITES a heartbeat row twice a week, which resets that timer,
-# so the database never idles out. Also runnable on demand from the Actions tab.
+# a connection and WRITES a heartbeat row once a day, which resets that timer, so
+# the database never idles out. Also runnable on demand from the Actions tab.
+#
+# Daily (not the usual twice-weekly — see dance-manager's copy of this file) at
+# the user's request after this project got a pause warning despite a working
+# but insufficient keep-alive; more margin costs nothing (~2 min/month).
 #
 # GOTCHA (found 2026-09-17): the first version of this ran `select now();` — a
 # pure function call that touches no table. The workflow ran successfully every
@@ -14,10 +18,10 @@ name: Supabase keep-alive
 
 on:
   schedule:
-    # Mondays & Thursdays at 07:23 UTC. Twice a week is well inside the 7-day
-    # window, so even a skipped/delayed run (GitHub can defer cron under load)
-    # is harmless. Odd minute avoids the top-of-hour rush when runs get delayed.
-    - cron: '23 7 * * 1,4'
+    # Every day at 07:23 UTC. Odd minute avoids the top-of-hour rush when runs
+    # get delayed; even a missed day or two (GitHub can defer cron under load)
+    # is still well inside the 7-day pause window.
+    - cron: '23 7 * * *'
   workflow_dispatch: {}
 
 concurrency:
