@@ -15,6 +15,16 @@ name: Supabase keep-alive
 # real table (Performers) was tried next and hasn't been proven to fail, but
 # rather than trust another guess at undocumented criteria, this now does a
 # genuine WRITE — the least ambiguous "this database is alive" signal there is.
+#
+# GOTCHA #2 (found 2026-11-10): GitHub DISABLES any scheduled workflow after 60
+# days with no *repository* activity — and a workflow's own cron runs do NOT
+# count as activity, only a commit/push does. So this file would run daily for
+# months, keep Supabase perfectly alive, and still get itself switched off (we
+# got the disable warning at ~54 days with zero commits since 2026-09-17). The
+# fix: the `github-heartbeat` job below pushes a tiny timestamp commit about
+# once a week, which resets GitHub's 60-day clock so this workflow keeps itself,
+# and therefore Supabase, alive indefinitely. If you ever copy this to another
+# repo (e.g. dance-manager), copy this job too or you'll hit the same trap.
 
 on:
   schedule:
@@ -49,3 +59,30 @@ jobs:
             -tAc 'INSERT INTO "_KeepAlive" (id, pinged_at) VALUES (1, now())
                   ON CONFLICT (id) DO UPDATE SET pinged_at = excluded.pinged_at
                   RETURNING pinged_at;'
+
+  # Keeps THIS workflow alive. See "GOTCHA #2" at the top: GitHub disables a
+  # scheduled workflow after 60 days with no commit, and cron runs don't count.
+  # A weekly timestamp commit is repository activity, so the 60-day clock never
+  # runs out. Independent of the Supabase ping above — either can fail without
+  # taking the other down.
+  github-heartbeat:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # lets the default GITHUB_TOKEN push the heartbeat commit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Commit a weekly heartbeat to reset GitHub's 60-day timer
+        run: |
+          # Runs daily with the ping, but only commits on Mondays (UTC) to keep
+          # history quiet. ~7-day gaps are comfortably inside the 60-day limit,
+          # even if GitHub defers a cron run or two under load.
+          if [ "$(date -u +%u)" != "1" ]; then
+            echo "Not Monday (UTC) — nothing to commit today."
+            exit 0
+          fi
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keepalive-heartbeat.txt
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive-heartbeat.txt
+          git commit -m "chore(keepalive): weekly heartbeat to keep the workflow enabled [skip ci]"
+          git push
